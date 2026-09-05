@@ -1,0 +1,25 @@
+[workspace]
+name = "beam-clamp"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[dependencies]
+python = ">=3.12"
+build123d = ">=0.9"
+just = "*"
+pytest = "*"
+
+[tasks]
+proto = "just proto"
+full = "just full"
+all = "just all"
+wrap-coupon = "just wrap-coupon"
+wrap = "just wrap"
+bolt-coupon = "just bolt-coupon"
+bolt = "just bolt"
+flex-coupon = "just flex-coupon"
+flex = "just flex"
+preview = "just preview"
+test = "just test"
+assembly = "just assembly"
+clean = "just clean"

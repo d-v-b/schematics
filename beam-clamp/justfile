@@ -1,0 +1,160 @@
+# Dev actions for the beam clamp and beam wrap. Run `just` to list them.
+#
+# Sweep and full-scale values live at the top of this file; edit them once you
+# know what fits. Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+# --- Clamp, phase 1: prototype sweep -------------------------------------
+proto_walls := "2 3 4"              # wall thickness, mm
+proto_clearances := "0.0 0.3 0.6"   # inner span minus beam width, mm
+proto_length := "10"                # short parts print fast; fit is identical
+
+# --- Clamp, phase 2: full-scale part --------------------------------------
+full_wall := "3"
+full_clearance := "0.3"
+full_length := "40"
+
+# --- Wrap: joint coupons and full halves ----------------------------------
+coupon_clearances := "0.15 0.25 0.4"   # joint_clearance, mm
+coupon_tooth_hs := "0.8 1.2"           # tooth_h, mm
+coupon_length := "10"
+wrap_wall := "3"
+wrap_clearance := "0.3"
+wrap_joint_clearance := "0.25"
+wrap_length := "40"
+
+# --- Bolt: joint coupons and full halves ----------------------------------
+bolt_clearances := "0.2 0.3 0.5"       # joint_clearance between the finger faces, mm
+bolt_coupon_length := "10"
+bolt_wall := "5"
+bolt_clearance := "0.3"
+bolt_joint_clearance := "0.3"
+bolt_length := "10"                    # 10 for the test print; 50 for the real part
+bolt_args := "--wall " + bolt_wall + " --clearance " + bolt_clearance
+
+# --- Flex: joint coupons and full halves ----------------------------------
+flex_clearances := "-0.3 0.0 0.2"      # joint_clearance between the nested laps, mm (negative = preload)
+flex_tooth_hs := "0.6 0.8"             # tooth_h, mm
+flex_coupon_length := "10"
+flex_wall := "5"
+flex_clearance := "0.3"
+flex_joint_clearance := "-0.3"
+flex_length := "10"                    # 10 for the test print; 50 for the real part
+flex_args := "--wall " + flex_wall + " --clearance " + flex_clearance
+
+default:
+    @just --list
+
+# Render one clamp file (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --wall 2`
+[positional-arguments]
+render outfile *args:
+    {{python}} beam_clamp.py -o "$@"
+
+# Render one wrap half (.stl, .step or .svg) with any --param overrides
+[positional-arguments]
+render-wrap outfile *args:
+    {{python}} beam_wrap.py -o "$@"
+
+# Render one bolted half (.stl, .step or .svg) with any --param overrides
+[positional-arguments]
+render-bolt outfile *args:
+    {{python}} beam_bolt.py -o "$@"
+
+# Render one flex half (.stl, .step or .svg) with any --param overrides
+[positional-arguments]
+render-flex outfile *args:
+    {{python}} beam_flex.py -o "$@"
+
+# Clamp phase 1: render the labelled fit-test sweep into {{out}}/
+proto:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for w in {{proto_walls}}; do
+        for c in {{proto_clearances}}; do
+            just render "{{out}}/proto_w${w}_c${c}.stl" \
+                --wall "$w" --clearance "$c" --length {{proto_length}} --label "w$w c$c"
+        done
+    done
+
+# Clamp phase 2: render the full-scale clamp with the chosen values
+full:
+    just render "{{out}}/beam_clamp_w{{full_wall}}_c{{full_clearance}}_L{{full_length}}.stl" \
+        --wall {{full_wall}} --clearance {{full_clearance}} --length {{full_length}}
+
+# Wrap phase 1: joint coupons over joint_clearance x tooth_h. Print each twice to get two mating pairs.
+wrap-coupon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for jc in {{coupon_clearances}}; do
+        for th in {{coupon_tooth_hs}}; do
+            just render-wrap "{{out}}/wrap_coupon_w{{wrap_wall}}_jc${jc}_th${th}.stl" \
+                --wall {{wrap_wall}} --clearance {{wrap_clearance}} --joint_clearance "$jc" \
+                --tooth_h "$th" --length {{coupon_length}} --coupon 1
+        done
+    done
+
+# Wrap phase 2: one full-scale half (print two)
+wrap:
+    just render-wrap "{{out}}/beam_wrap_w{{wrap_wall}}_c{{wrap_clearance}}_jc{{wrap_joint_clearance}}_L{{wrap_length}}.stl" \
+        --wall {{wrap_wall}} --clearance {{wrap_clearance}} --joint_clearance {{wrap_joint_clearance}} \
+        --length {{wrap_length}}
+
+# Bolt phase 1: joint coupons over joint_clearance. Print each twice to get two mating pairs.
+bolt-coupon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for jc in {{bolt_clearances}}; do
+        just render-bolt "{{out}}/bolt_coupon_w{{bolt_wall}}_jc${jc}.stl" \
+            {{bolt_args}} --joint_clearance "$jc" --length {{bolt_coupon_length}} --coupon 1
+    done
+
+# Bolt phase 2: one full-scale bolted half (print two)
+bolt:
+    just render-bolt "{{out}}/beam_bolt_w{{bolt_wall}}_c{{bolt_clearance}}_jc{{bolt_joint_clearance}}_L{{bolt_length}}.stl" \
+        {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}}
+
+# Flex phase 1: joint coupons over joint_clearance x tooth_h. Print each twice to get two mating pairs.
+flex-coupon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for jc in {{flex_clearances}}; do
+        for th in {{flex_tooth_hs}}; do
+            just render-flex "{{out}}/flex_coupon_w{{flex_wall}}_jc${jc}_th${th}.stl" \
+                {{flex_args}} --joint_clearance "$jc" --tooth_h "$th" --length {{flex_coupon_length}} --coupon 1
+        done
+    done
+
+# Flex phase 2: one full-scale flex half (print two)
+flex:
+    just render-flex "{{out}}/beam_flex_w{{flex_wall}}_c{{flex_clearance}}_jc{{flex_joint_clearance}}_L{{flex_length}}.stl" \
+        {{flex_args}} --joint_clearance {{flex_joint_clearance}} --length {{flex_length}}
+
+# Render everything
+all: proto full wrap-coupon wrap bolt-coupon bolt flex-coupon flex
+
+# Regenerate the drawings used by the README
+preview:
+    just render profile.svg
+    just render-wrap wrap_profile.svg
+    {{python}} -c "from beam_wrap import WrapParams, export_assembly_svg; export_assembly_svg(WrapParams(), 'wrap_assembly.svg')"
+    just render-bolt bolt_profile.svg {{bolt_args}}
+    {{python}} -c "from beam_bolt import BoltParams, export_assembly_svg; export_assembly_svg(BoltParams(), 'bolt_assembly.svg')"
+    just render-flex flex_profile.svg {{flex_args}}
+    {{python}} -c "from beam_flex import FlexParams, export_assembly_svg; export_assembly_svg(FlexParams(), 'flex_assembly.svg')"
+
+# Model each design assembled around a solid beam: STEP + STL + SVG views in assembly/
+assembly:
+    {{python}} assembly.py clamp
+    {{python}} assembly.py wrap
+    {{python}} assembly.py bolt {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}}
+    {{python}} assembly.py flex {{flex_args}} --joint_clearance {{flex_joint_clearance}} --length {{flex_length}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
