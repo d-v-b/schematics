@@ -21,21 +21,22 @@ TOL = 1e-3
     (200.0, 40.0, 20.0, 0, 40.0, 4),   # R40: 40-80-120-160
     (80.0, 40.0, 20.0, 0, 20.0, 2),    # R20: 20 and 60
     (40.0, 40.0, 20.0, 0, 20.0, 1),    # one slot on both arc centres at once
-    (110.0, 35.0, 10.0, 3, 20.0, 3),   # fixed count: 20-55-90
+    (120.0, 40.0, 10.0, 3, 20.0, 3),   # fixed count: 20-60-100
     (200.0, 40.0, 20.0, 0, 0.0, 5),    # square ends: row centred, 20-60-100-140-180
     (200.0, 40.0, 30.0, 0, 0.0, 4),    # square ends: 40-80-120-160
     (100.0, 40.0, 20.0, 0, 0.0, 2),    # 60 mm span fits two at 40 (20 and 60), centred at 30 and 70
-    (120.0, 35.0, 10.0, 3, 0.0, 3),    # fixed count, square
+    (120.0, 40.0, 10.0, 3, 0.0, 3),    # fixed count, square: 20-60-100
 ])
 @pytest.mark.parametrize("slot_w,slot_l,width,thickness", [
     (6.6, 30.0, 40.0, 4.0),
     (6.4, 20.0, 40.0, 4.0),
-    (5.0, 5.0, 30.0, 3.0),       # round holes
+    (5.0, 5.0, 30.0, 4.0),       # round holes
 ])
+@pytest.mark.parametrize("csk_d", [12.4, 0.0])
 @pytest.mark.parametrize("label", ["", "p40 s30"])
-def test_fit(length, pitch, end_margin, slots, expect_n, end_r, slot_w, slot_l, width, thickness, label):
+def test_fit(length, pitch, end_margin, slots, expect_n, end_r, slot_w, slot_l, width, thickness, csk_d, label):
     p = BarParams(length=length, width=width, thickness=thickness, slot_w=slot_w, slot_l=slot_l,
-                  pitch=pitch, end_margin=end_margin, slots=slots, end_r=end_r, label=label)
+                  pitch=pitch, end_margin=end_margin, slots=slots, end_r=end_r, csk_d=csk_d, label=label)
     assert p.n_slots == expect_n
     body = bar(p)
     assert body.is_valid() and len(body.solids()) == 1
@@ -84,11 +85,30 @@ def test_fit(length, pitch, end_margin, slots, expect_n, end_r, slot_w, slot_l, 
         # and the whole outline is symmetric about both axes
         assert plan_outline.bounding_box().center().X == pytest.approx(0, abs=TOL)
 
+    # the countersink: the slot opens out to csk_d at the top face and is
+    # unchanged at the bottom
+    d = p.csk_depth
+    top = next(f for f in body.faces() if abs(f.center().Z - thickness) < TOL and f.normal_at().Z > 0.99)
+    bottom = next(f for f in body.faces() if abs(f.center().Z) < TOL)
+    # (the label's letters are inner wires of the top face too, off the centreline)
+    on_axis = lambda ws: sorted((b for b in (w.bounding_box() for w in ws) if abs(b.center().Y) < 1.0), key=lambda b: b.center().X)
+    tops = on_axis(top.inner_wires())
+    bots = on_axis(bottom.inner_wires())
+    assert len(tops) == expect_n == len(bots)
+    for tb, bb2, x in zip(tops, bots, xs):
+        assert tb.center().X == pytest.approx(x, abs=TOL) and bb2.center().X == pytest.approx(x, abs=TOL)
+        assert (tb.size.X, tb.size.Y) == pytest.approx((slot_l + 2 * d, slot_w + 2 * d), abs=TOL)
+        assert (bb2.size.X, bb2.size.Y) == pytest.approx((slot_l, slot_w), abs=TOL)
+    assert d == pytest.approx(max(0.0, (csk_d - slot_w) / 2))
+
     # volume: bar minus the end caps minus the corner rounds minus the slots
-    # (minus a sliver of lettering). With arc ends the corner rounds are not
-    # right angles, so bound them instead of computing them.
+    # minus the countersinks (minus a sliver of lettering). With arc ends the
+    # corner rounds are not right angles, so bound them instead of computing
+    # them. A 45 degree countersink round a stadium removes d^2 per unit of
+    # straight edge and pi (r d^2 + d^3 / 3) round the two half-circles.
     slot_area = (slot_l - slot_w) * slot_w + math.pi * (slot_w / 2) ** 2
     solid = length * width - expect_n * slot_area
+    csk_vol = expect_n * ((slot_l - slot_w) * d**2 + math.pi * (slot_w / 2 * d**2 + d**3 / 3))
     if end_r > 0:
         theta = 2 * math.asin(width / 2 / end_r)
         segment = end_r**2 / 2 * (theta - math.sin(theta))
@@ -97,8 +117,8 @@ def test_fit(length, pitch, end_margin, slots, expect_n, end_r, slot_w, slot_l, 
     else:
         fillet_lo = fillet_hi = 4 * p.corner_r**2 * (1 - math.pi / 4)
     label_area = 0.5 * p.label_depth / thickness * width * pitch if label else 0.0
-    lo = (solid - fillet_lo - label_area) * thickness
-    hi = (solid - fillet_hi) * thickness
+    lo = (solid - fillet_lo - label_area) * thickness - csk_vol
+    hi = (solid - fillet_hi) * thickness - csk_vol
     assert lo - 1e-6 < body.volume <= hi + 1e-6
     if not label and (end_r == 0 or p.end_is_semicircle):
         assert body.volume == pytest.approx(hi, rel=1e-6)
@@ -114,6 +134,21 @@ def test_rejects_merging_slots():
 def test_rejects_slot_shorter_than_wide():
     with pytest.raises(ValueError, match="slot_l must be at least slot_w"):
         profile(BarParams(slot_w=6.6, slot_l=5.0))
+
+
+def test_rejects_countersink_narrower_than_slot():
+    with pytest.raises(ValueError, match="csk_d must be 0 or wider than slot_w"):
+        profile(BarParams(csk_d=6.0))
+
+
+def test_rejects_countersink_through_bar():
+    with pytest.raises(ValueError, match="countersink must be shallower"):
+        profile(BarParams(thickness=2.5))
+
+
+def test_rejects_countersinks_merging():
+    with pytest.raises(ValueError, match="countersinks of neighbouring slots merge"):
+        profile(BarParams(pitch=35.0))
 
 
 def test_rejects_slot_wider_than_bar():

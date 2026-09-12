@@ -2,8 +2,9 @@
 
 A flat 40 x 4 mm bar with a row of slots for M6 bolts down its middle. It
 sits on top of a 40 mm aluminium extrusion rail and bolts into the rail's
-T-slot with M6 bolts and T-nuts; the slots let each bolt sit anywhere
-along its 30 mm. Each end is a 20 mm radius semicircle centred on the
+T-slot with M6 countersunk screws and T-nuts; the slots let each screw sit
+anywhere along its 30 mm, and the countersink keeps the heads flush with
+the top. Each end is a 20 mm radius semicircle centred on the
 first slot, so a bar pivoting on a bolt there turns on the rail without
 its end swinging out past the bar's own width.
 
@@ -19,6 +20,7 @@ its end swinging out past the bar's own width.
 | slot width | 6.6 mm (M6 clearance 6.4 + 0.2 print allowance) | `--slot_w` |
 | slot length | 30 mm overall, round ends | `--slot_l` |
 | slot pitch | 40 mm (so 10 mm of material between slots) | `--pitch` |
+| countersink | 12.4 mm wide at the top, 90°, so 2.9 mm deep (ISO 10642 M6 head 12.0 + 0.4); 0 = none | `--csk_d` |
 | end margin | 20 mm (square ends only: least distance from an end to a slot centre) | `--end_margin` |
 | slot count | as many as fit | `--slots` |
 | end cap radius | 20 mm (arc centred that far in from the tip; 20 = semicircle, 0 = square) | `--end_r` |
@@ -43,4 +45,7 @@ pixi run render out.stl --length 120 --pitch 30 --slot_l 20 --end_r 0
 pixi run test
 ```
 
-Print it flat, as modelled: the slots run vertically and nothing overhangs.
+Print it flat, as modelled, top face up: the slots run vertically and the
+countersinks face upward, so nothing overhangs. Use M6 flat-head
+(countersunk, 90°) screws; a cap or button head would stand proud of the
+4 mm bar.

@@ -17,7 +17,9 @@ from each tip, so the length must be ``2 * end_r`` plus a whole number of
 pitches; with square ends the row is centred along the length so the end
 slots sit at least ``end_margin`` from the ends. ``slots`` fixes the count
 instead when it is positive. ``slot_l`` equal to ``slot_w`` gives plain
-round holes.
+round holes. Each slot is countersunk 90 degrees from the top face out to
+``csk_d`` wide, so M6 flat-head (countersunk) screws sit flush and the top
+stays clear for whatever slides over it; 0 leaves the slots square-edged.
 
 The bar lies in the XY plane centred on the origin, its length along X and
 its width along Y, and is extruded ``thickness`` up Z. Print it flat, as
@@ -77,6 +79,11 @@ class BarParams:
     end_margin: float = 20.0
     # Number of slots. 0 = as many as fit at the pitch inside the margins.
     slots: int = 0
+    # Width at the top face of the 90 degree countersink along each slot,
+    # for flat-head screws. An ISO 10642 M6 head is 12.0 across (theoretical
+    # sharp edge); 0.4 more lets a printed countersink take it flush. The
+    # countersink is (csk_d - slot_w) / 2 deep. 0 = none.
+    csk_d: float = 12.4
     # Radius of the arc capping each end, centred on the centreline this far
     # in from the tip: a bolt there is the pivot the bar can turn on without
     # the end reaching past this radius. 0 = square ends. Must be at least
@@ -131,9 +138,19 @@ class BarParams:
         return 0 < self.end_r <= self.width / 2 + 1e-9
 
     @property
+    def csk_depth(self) -> float:
+        """How far the 90 degree countersink reaches down from the top face."""
+        return max(0.0, (self.csk_d - self.slot_w) / 2)
+
+    @property
     def ligament(self) -> float:
         """Solid material between two neighbouring slots."""
         return self.pitch - self.slot_l
+
+    @property
+    def top_ligament(self) -> float:
+        """Material left between neighbouring countersinks at the top face."""
+        return self.ligament - 2 * self.csk_depth
 
     @property
     def edge_ligament(self) -> float:
@@ -151,6 +168,14 @@ class BarParams:
             raise ValueError("pitch must exceed slot_l, or the slots merge")
         if self.slot_w >= self.width:
             raise ValueError("slot_w must be less than width")
+        if self.csk_d < 0 or (0 < self.csk_d <= self.slot_w):
+            raise ValueError("csk_d must be 0 or wider than slot_w")
+        if self.csk_d >= self.width:
+            raise ValueError("csk_d must be less than width")
+        if self.csk_depth >= self.thickness:
+            raise ValueError("countersink must be shallower than the bar: reduce csk_d or thicken the bar")
+        if self.n_slots > 1 and self.top_ligament <= 0:
+            raise ValueError("the countersinks of neighbouring slots merge: widen the pitch or reduce csk_d")
         if self.end_r < 0 or (0 < self.end_r < self.width / 2):
             raise ValueError("end_r must be 0 or at least width / 2, so the arc spans the bar")
         if self.end_r > 0 and self.length < 2 * self.end_r:
@@ -170,8 +195,8 @@ class BarParams:
                     f"2 * end_r + k * pitch: got {self.length}, nearest are {lo:g} and {hi:g}"
                 )
         xs = self.slot_xs
-        if xs[-1] + self.slot_l / 2 >= self.length / 2:
-            raise ValueError("the end slots break out of the bar's ends")
+        if xs[-1] + self.slot_l / 2 + self.csk_depth >= self.length / 2:
+            raise ValueError("the end slots (with their countersinks) break out of the bar's ends")
         if self.corner_r < 0:
             raise ValueError("corner_r must not be negative")
         if not self.end_is_semicircle and 2 * self.corner_r > min(self.length - 2 * self.end_sagitta, self.width):
@@ -189,6 +214,11 @@ class BarParams:
         )
         if self.end_r > 0:
             text += f"; ends capped R{self.end_r} with the end slots centred on the arcs"
+        if self.csk_d > 0:
+            text += (
+                f"; countersunk to {self.csk_d} wide, {self.csk_depth:.1f} deep, "
+                f"leaving {self.thickness - self.csk_depth:.1f} of straight wall"
+            )
         return text
 
 
@@ -208,14 +238,16 @@ def outline(p: BarParams) -> Sketch:
     return Sketch([face])
 
 
-def _slot(p: BarParams):
-    if p.slot_l <= p.slot_w:  # a round hole; SlotOverall refuses a zero-length slot
-        return Circle(p.slot_w / 2)
-    return SlotOverall(p.slot_l, p.slot_w)
+def _stadium(length: float, width: float):
+    """A slot outline length long overall and width wide, or a circle when
+    they are equal (SlotOverall refuses a zero-length slot)."""
+    if length <= width + 1e-9:
+        return Circle(width / 2)
+    return SlotOverall(length, width)
 
 
 def slots(p: BarParams) -> Sketch:
-    return Sketch([_slot(p).moved(Location((x, 0))).face() for x in p.slot_xs])
+    return Sketch([_stadium(p.slot_l, p.slot_w).moved(Location((x, 0))).face() for x in p.slot_xs])
 
 
 def profile(p: BarParams) -> Sketch:
@@ -235,8 +267,24 @@ def _label_cut(p: BarParams) -> Part | None:
     return extrude(text, amount=-p.label_depth)
 
 
+def _countersink(p: BarParams, body: Part) -> Part:
+    """Cut a 90 degree countersink the whole way round each slot: a stadium
+    csk_d wide at the top face, tapering at 45 degrees down to the slot
+    at csk_depth (run a hair past, inside the slot's void, so no faces
+    coincide)."""
+    d = p.csk_depth
+    if d <= 0:
+        return body
+    top = Plane.XY.offset(p.thickness)
+    for x in p.slot_xs:
+        wide = top * _stadium(p.slot_l + 2 * d, p.csk_d).moved(Location((x, 0)))
+        body = body - extrude(wide, amount=-(d + 0.01), taper=45)
+    return body
+
+
 def bar(p: BarParams) -> Part:
     body = extrude(profile(p), amount=p.thickness, dir=(0, 0, 1))
+    body = _countersink(p, body)
     cut = _label_cut(p)
     if cut is not None:
         body = body - cut
