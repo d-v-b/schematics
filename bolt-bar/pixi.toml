@@ -11,6 +11,7 @@ pytest = "*"
 
 [tasks]
 bar = "just bar"
+render = "just render"
 preview = "just preview"
 test = "just test"
 clean = "just clean"

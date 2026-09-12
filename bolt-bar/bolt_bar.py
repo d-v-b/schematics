@@ -2,8 +2,12 @@
 of a 40 mm aluminium extrusion rail and be bolted into its T-slot anywhere
 along each slot.
 
-The bar is ``width`` x ``thickness`` in section and ``length`` long, with
-its plan corners rounded to ``corner_r``. Each slot is ``slot_w`` wide
+The bar is ``width`` x ``thickness`` in section and ``length`` long. Each
+end is capped by a circular arc of radius ``end_r`` centred on the bar's
+centreline ``end_r`` in from the tip, so a bar pivoting on a bolt at that
+point sweeps nothing beyond a circle of that radius and can turn on the
+rail without the end protruding. The corners where the arcs meet the long
+sides are rounded to ``corner_r``. Each slot is ``slot_w`` wide
 (M6 clearance plus a print allowance) and ``slot_l`` long overall along
 the bar, with round ends; the slots repeat on a ``pitch`` along the bar's
 centreline, leaving ``pitch - slot_l`` of material between them, and the
@@ -31,13 +35,16 @@ from build123d import (
     FontStyle,
     Location,
     Part,
+    Line,
     Plane,
     RectangleRounded,
     Sketch,
     SlotOverall,
     Text,
+    ThreePointArc,
     export_stl,
     extrude,
+    make_face,
 )
 
 
@@ -65,7 +72,12 @@ class BarParams:
     end_margin: float = 20.0
     # Number of slots. 0 = as many as fit at the pitch inside the margins.
     slots: int = 0
-    # Radius on the bar's four plan corners.
+    # Radius of the arc capping each end, centred on the centreline this far
+    # in from the tip: a bolt there is the pivot the bar can turn on without
+    # the end reaching past this radius. 0 = square ends. Must be at least
+    # half the width so the arc spans the bar.
+    end_r: float = 40.0
+    # Radius on the four plan corners where the end arcs meet the sides.
     corner_r: float = 3.0
     # ID engraved into the top face, reading along the bar, in the strip
     # of material beside the slot row. Empty disables.
@@ -90,6 +102,13 @@ class BarParams:
         return [(i - (n - 1) / 2) * self.pitch for i in range(n)]
 
     @property
+    def end_sagitta(self) -> float:
+        """How far the tip of the end arc stands proud of the corners."""
+        if self.end_r <= 0:
+            return 0.0
+        return self.end_r - math.sqrt(self.end_r**2 - (self.width / 2) ** 2)
+
+    @property
     def ligament(self) -> float:
         """Solid material between two neighbouring slots."""
         return self.pitch - self.slot_l
@@ -110,29 +129,60 @@ class BarParams:
             raise ValueError("pitch must exceed slot_l, or the slots merge")
         if self.slot_w >= self.width:
             raise ValueError("slot_w must be less than width")
+        if self.end_r < 0 or (0 < self.end_r < self.width / 2):
+            raise ValueError("end_r must be 0 or at least width / 2, so the arc spans the bar")
+        if self.end_r > 0 and self.length < 2 * self.end_r:
+            raise ValueError("length must be at least 2 * end_r, or the end arcs cross")
         if self.n_slots < 1:
             raise ValueError("no slot fits: length must be at least 2 * end_margin")
         xs = self.slot_xs
         if xs[-1] + self.slot_l / 2 >= self.length / 2:
             raise ValueError("the end slots break out of the bar's ends")
-        if self.corner_r < 0 or 2 * self.corner_r > min(self.length, self.width):
+        if self.corner_r < 0 or 2 * self.corner_r > min(self.length - 2 * self.end_sagitta, self.width):
             raise ValueError("corner_r must fit within the bar")
         if self.label and self.label_depth >= self.thickness:
             raise ValueError("label_depth must be less than thickness")
 
     def report(self) -> str:
         xs = self.slot_xs
-        return (
+        text = (
             f"{self.width} x {self.thickness} x {self.length} bar, "
             f"{self.n_slots} slots {self.slot_w} x {self.slot_l} at {self.pitch} pitch, "
             f"end margin {self.length / 2 - xs[-1]:.1f}, "
             f"ligament {self.ligament:.1f} between slots, {self.edge_ligament:.1f} to the edge"
         )
+        if self.end_r > 0:
+            where = "in a slot" if self.pivot_in_slot else "between slots, so no bolt can sit there"
+            text += f"; ends capped R{self.end_r}, pivot {self.end_r} from each tip is {where}"
+        return text
+
+    @property
+    def pivot_in_slot(self) -> bool:
+        """Whether a bolt can be centred end_r in from the tip, i.e. whether
+        some slot's straight run covers that point."""
+        x = self.length / 2 - self.end_r
+        reach = (self.slot_l - self.slot_w) / 2
+        return any(abs(x - c) <= reach + 1e-9 for c in self.slot_xs)
 
 
 def outline(p: BarParams) -> Sketch:
-    """The bar's plan without holes."""
-    return Sketch(list(RectangleRounded(p.length, p.width, p.corner_r).faces()))
+    """The bar's plan without the slots: a rectangle, its ends trimmed to
+    the arcs, its corners rounded."""
+    if p.end_r <= 0:
+        return Sketch(list(RectangleRounded(p.length, p.width, p.corner_r).faces()))
+    xc, yc, xt = p.length / 2 - p.end_sagitta, p.width / 2, p.length / 2  # corner and tip
+    face = make_face(
+        [
+            Line((-xc, -yc), (xc, -yc)),
+            ThreePointArc((xc, -yc), (xt, 0), (xc, yc)),
+            Line((xc, yc), (-xc, yc)),
+            ThreePointArc((-xc, yc), (-xt, 0), (-xc, -yc)),
+        ]
+    )
+    face = face.face()
+    if p.corner_r > 0:
+        face = face.fillet_2d(p.corner_r, face.vertices())
+    return Sketch([face])
 
 
 def _slot(p: BarParams):
