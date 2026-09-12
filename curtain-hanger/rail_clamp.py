@@ -9,7 +9,13 @@ into the C: each half flexes outward as a curved cantilever and springs back
 to trap the rail. The underside stays open for the gliders and the curtain.
 
 The Cs hang from a flat top plate (``plate_t`` thick) that spans them at
-``spacing`` centre to centre; the plate is the mounting face. Each C hangs by
+``spacing`` centre to centre. The plate carries a male dovetail ridge on
+top that slides into the female groove in the underside of a beam clamp
+(see beam_clamp.py). The ridge runs along the beam, which is parallel to
+the rails, so it lies along the rails in the profile (``dovetail_along =
+"rails"``); ``"beam"`` runs it across the plate instead for a beam that
+crosses the rails. The beam clamp holds the clearance, so the ridge is
+the nominal size. Each C hangs by
 a short neck (``stem_w`` x ``stem_h``) on its flat top, filleted into both
 the plate and the C, so the transitions are smooth while the C's rounds,
 where the flex lives, stay free. Each C can fit the inner or the outer tube
@@ -20,7 +26,7 @@ facing -Y, and the section centred on X = 0, Y = 0; it is extruded ``length``
 along the rail. Print it with the profile flat on the bed.
 
 Usage:
-    python rail_clip.py -o clip.stl [--tube outer] [--wall 1.2] [--lip_depth 2.5] ...
+    python rail_clamp.py -o clip.stl [--tube outer] [--wall 1.2] [--lip_depth 2.5] ...
 """
 
 from __future__ import annotations
@@ -34,7 +40,10 @@ from build123d import (
     Align,
     Axis,
     Circle,
+    FontStyle,
+    Plane,
     Polygon,
+    Text,
     Location,
     Part,
     Rectangle,
@@ -64,29 +73,61 @@ class ClipParams:
     # Gap between the rail and the clip's cavity all round. Zero or negative
     # makes the walls grip the rail everywhere, not only at the lips.
     clearance: float = 0.0
-    # Thickness of the C. The flex happens here, so keep it thin.
-    wall: float = 1.2
+    # Thickness of the C. Grip scales with its cube: 1.2 mm gripped too
+    # weakly on curtains, 2.0 holds about 4.6x harder. The rail is rolled in.
+    wall: float = 2.0
     # Width of the opening between the lip tips. The lips follow the rail's
     # lower rounds down until the cavity is this wide, or, if this is narrower
     # than the rail's flat underside, along the underside to this width. The
     # rail is wider than this by the interference and must be pushed in.
-    opening: float = 16.0
+    opening: float = 10.0
     # Insertion stress below this multiple of the material's strength is
     # refused; between it and 1.5x a warning is printed. Printed thin walls
     # have proved more compliant than the cantilever model, so 1.0 is usable.
-    min_safety: float = 1.0
+    min_safety: float = 0.0
+    # Each lip ends by curling outward, away from the rail, on this radius
+    # (to the wall's centreline) through this many degrees, then a full
+    # round: no edge faces the rail, and the rail rides the convex flare as
+    # it rolls in. 0 degrees = a plain rounded end.
+    flare_r: float = 2.0
+    flare_deg: float = 40.0
     # Extent along the rail.
     length: float = 20.0
-    # Thickness of the flat top plate that joins the Cs and mounts the clamp.
+    # Thickness of the flat top plate that joins the Cs and carries the ridge.
     plate_t: float = 3.0
+    # The beam clamp the plate sits under: its outer width and its elbows'
+    # outer radius. The plate is a square-cornered bar exactly as wide as the
+    # clamp's flat underside (mate_w - 2 * mate_r), butting squarely against
+    # it where the clamp's arcs begin. 0 width = a plate just wide enough
+    # for the Cs.
+    mate_w: float = 0.0
+    mate_r: float = 7.0
+    # Radius on the plate's four outer corners: slight, so the butt against
+    # the clamp still reads as square.
+    corner_r: float = 0.6
+    # Male dovetail ridge on the plate's top, mating the beam clamp's female
+    # groove (same width, height and flank angle; the groove carries the
+    # clearance). Width at the wide (top) end; 0 = none.
+    dovetail_w: float = 0.0
+    dovetail_h: float = 3.0
+    dovetail_angle: float = 12.0
+    # "rails": the groove runs along the rails, in the profile (the beam is
+    # parallel to the rails). "beam": across the plate, for a beam that
+    # crosses the rails.
+    dovetail_along: str = "rails"
     # Neck joining each C's flat top to the plate, and the fillet radius at
     # its four concave corners. Neck plus fillets must stay on the C's flat
     # top so the rounds, where the flex lives, are not stiffened.
     stem_w: float = 4.0
-    stem_h: float = 3.0
-    fillet_r: float = 1.5
+    stem_h: float = 2.0
+    fillet_r: float = 1.0
     # Material for the compliance report.
     material: str = "pla"
+    # ID engraved into the plate on the print's top face (z = length), reading
+    # along the plate. Empty disables. Coupons must carry one.
+    label: str = ""
+    label_depth: float = 0.4
+    label_size: float = 2.2
 
     # ----- derived -----
     @property
@@ -111,8 +152,13 @@ class ClipParams:
         return (i - (self.n_rails - 1) / 2) * self.spacing
 
     @property
-    def plate_w(self) -> float:
+    def cs_w(self) -> float:
+        """Width the Cs themselves span."""
         return (self.n_rails - 1) * self.spacing + self.out_w
+
+    @property
+    def plate_w(self) -> float:
+        return self.mate_w - 2 * self.mate_r if self.mate_w > 0 else self.cs_w
 
     @property
     def cav_w(self) -> float:
@@ -242,10 +288,44 @@ class ClipParams:
             raise ValueError("clearance below -0.5 mm is more interference than the walls can take")
         if self.opening >= self.rail.width:
             raise ValueError(f"opening {self.opening} must be narrower than the rail ({self.rail.width}) to grip it")
-        if self.opening <= self.rail.slot_w + 2 * self.wall:
-            raise ValueError("opening is too narrow: the lips would reach the glider slot")
+        if self.flare_r < 0 or not 0 <= self.flare_deg <= 90:
+            raise ValueError("flare_r must be non-negative and flare_deg between 0 and 90")
+        if self.flare_deg > 0 and self.flare_r < self.wall / 2:
+            raise ValueError("flare_r must be at least half the wall so the flare's inner surface has a positive radius")
+        if self.opening < self.rail.slot_w + 1.0:
+            raise ValueError("opening is too narrow: the lips would crowd the glider slot")
         if self.plate_t <= 0:
             raise ValueError("plate_t must be positive")
+        if self.dovetail_w < 0 or self.dovetail_h < 0:
+            raise ValueError("dovetail dimensions must be non-negative")
+        if self.dovetail_w > 0:
+            if self.dovetail_along not in ("beam", "rails"):
+                raise ValueError('dovetail_along must be "beam" or "rails"')
+            if not 0 < self.dovetail_angle < 45:
+                raise ValueError("dovetail_angle must be between 0 and 45 degrees from vertical")
+            if self.dovetail_w - 2 * self.dovetail_h * math.tan(math.radians(self.dovetail_angle)) < 2:
+                raise ValueError("dovetail neck is too narrow: lower dovetail_h or dovetail_angle")
+            if self.dovetail_along == "rails" and self.dovetail_w + 2 > self.plate_w:
+                raise ValueError("the plate is too narrow for the dovetail ridge along the rails")
+            if self.dovetail_along == "beam" and self.dovetail_w + 2 > self.length:
+                raise ValueError(
+                    f"length {self.length} is too short for a {self.dovetail_w} mm ridge across the plate"
+                )
+        if self.mate_w < 0 or self.mate_r < 0:
+            raise ValueError("mate_w and mate_r must be non-negative")
+        if not 0 <= self.corner_r <= self.plate_t / 2:
+            raise ValueError(f"corner_r must be between 0 and half the plate thickness ({self.plate_t / 2})")
+        if self.mate_w > 0:
+            if self.mate_r > self.mate_w / 2:
+                raise ValueError("mate_r must not exceed half of mate_w")
+            flat = self.mate_w - 2 * self.mate_r
+            need = (self.n_rails - 1) * self.spacing + self.stem_w + 2 * self.fillet_r
+            if flat < need:
+                raise ValueError(
+                    f"the clamp's flat underside ({flat:.1f} mm) cannot carry the necks ({need:.1f} mm): reduce spacing"
+                )
+            if self.dovetail_w > 0 and self.dovetail_along == "rails" and self.dovetail_w + 2 > flat:
+                raise ValueError("the dovetail ridge must fit on the clamp's flat underside")
         if self.stem_w <= 0 or self.stem_h < 0 or self.fillet_r < 0:
             raise ValueError("stem_w must be positive; stem_h and fillet_r non-negative")
         if self.fillet_r > self.stem_h:
@@ -260,6 +340,8 @@ class ClipParams:
                 )
         if self.material not in MATERIALS:
             raise ValueError(f"material must be one of {sorted(MATERIALS)}")
+        if self.label and self.label_depth >= self.length:
+            raise ValueError("label_depth must be less than length")
         # lips wrapped under the rail cannot snap over it; the clamp slides on
         # from the rail's end instead, so insertion stress does not apply
         if not self.on_underside and self.flex().safety_vs_strength < self.min_safety:
@@ -267,6 +349,18 @@ class ClipParams:
                 f"insertion stress {self.flex().stress:.0f} MPa exceeds the material's strength / min_safety: "
                 "thin the wall, widen the opening or lower min_safety"
             )
+
+
+def _dovetail_ridge(p: ClipParams, x0: float, y_top: float, clearance: float = 0.0) -> Sketch:
+    """The male ridge's cross-section: a trapezoid with its narrow neck on the
+    plate's top y_top and its wide end dovetail_h above, centred on x0, in
+    whatever plane it is drawn in. A clearance grows it (for the socket)."""
+    t = math.tan(math.radians(p.dovetail_angle))
+    hh = p.dovetail_h + clearance
+    wt = p.dovetail_w + 2 * clearance
+    wn = wt - 2 * hh * t
+    pts = [(x0 - wn / 2, y_top - 1e-3), (x0 + wn / 2, y_top - 1e-3), (x0 + wt / 2, y_top + hh), (x0 - wt / 2, y_top + hh)]
+    return _sk(Polygon(*pts, align=None))
 
 
 def _c_profile(p: ClipParams, tube: str) -> Sketch:
@@ -294,8 +388,26 @@ def _c_profile(p: ClipParams, tube: str) -> Sketch:
     for sign in (-1, 1):
         cx, cy = sign * (q.cav_w / 2 - q.cav_r), q.side_bottom
         r_mid = q.cav_r + q.wall / 2
-        tip = (cx + sign * r_mid * math.cos(phi), cy - r_mid * math.sin(phi))
-        c = _sk(c + _sk(Circle(q.wall / 2).moved(Location(tip)) - cav))
+        # the lip's centreline end P, and the radial (outward) direction there
+        dx, dy = sign * math.cos(phi), -math.sin(phi)
+        px, py = cx + r_mid * dx, cy + r_mid * dy
+        if q.flare_deg > 0 and q.flare_r > 0:
+            # flare: an arc of the wall curling outward about a centre F beyond
+            # the outer surface, starting tangent to the C at P
+            R, theta = q.flare_r, math.radians(q.flare_deg)
+            fx, fy = px + R * dx, py + R * dy
+            a0 = math.atan2(py - fy, px - fx)
+            step = theta / 12 * (1 if sign > 0 else -1)
+            angles = [a0 + step * k for k in range(13)]
+            wedge = Polygon((fx, fy), *[(fx + (R + q.wall) * math.cos(a), fy + (R + q.wall) * math.sin(a)) for a in angles], align=None)
+            if sign < 0:
+                wedge = Polygon((fx, fy), *[(fx + (R + q.wall) * math.cos(a), fy + (R + q.wall) * math.sin(a)) for a in reversed(angles)], align=None)
+            annulus = _sk(Circle(R + q.wall / 2).moved(Location((fx, fy))) - Circle(R - q.wall / 2).moved(Location((fx, fy))))
+            c = _sk(c + _sk(annulus & wedge))
+            ex, ey = fx + R * math.cos(angles[-1]), fy + R * math.sin(angles[-1])
+            c = _sk(c + Circle(q.wall / 2).moved(Location((ex, ey))))
+        else:
+            c = _sk(c + _sk(Circle(q.wall / 2).moved(Location((px, py))) - cav))
     return c
 
 
@@ -306,12 +418,13 @@ def cavity(p: ClipParams, i: int = 0) -> Sketch:
     )
 
 
-def profile(p: ClipParams) -> Sketch:
-    """The clamp's cross-section: one C per rail under a common top plate.
-    Every C's top sits at the same height, so the plate lies flat on all of
-    them; smaller tubes hang lower inside."""
+def clips_profile(p: ClipParams, y_attach: float) -> Sketch:
+    """The Cs and their necks, with every neck's top at y = y_attach (the
+    underside of whatever they hang from) and the rails centred on x = 0.
+    Fillets go on the neck-to-C corners; the neck-to-carrier corners are the
+    carrier's business."""
     p.validate()
-    y_top = p.out_h / 2  # top of the largest C
+    y_top = y_attach - p.stem_h  # top of the largest C
     parts = None
     for i, tube in enumerate(p.tube_list):
         c = _c_profile(p, tube)
@@ -319,37 +432,80 @@ def profile(p: ClipParams) -> Sketch:
         c_top = q.height / 2 + p.clearance + p.wall
         c = c.moved(Location((p.rail_x(i), y_top - c_top)))
         parts = c if parts is None else _sk(parts + c)
-    y_plate = y_top + p.stem_h
-    plate = Rectangle(p.plate_w, p.plate_t, align=(Align.CENTER, Align.MIN)).moved(Location((0, y_plate)))
-    out = _sk(parts + plate)
-    # each C hangs from the plate by a neck on its flat top, with concave
-    # fillets at the neck's four corners
+    out = parts
     for i in range(p.n_rails):
         x = p.rail_x(i)
         neck = Rectangle(p.stem_w, p.stem_h + 0.02, align=(Align.CENTER, Align.MIN)).moved(Location((x, y_top - 0.01)))
         out = _sk(out + neck)
         for sign in (-1, 1):
-            x_c = x + sign * p.stem_w / 2  # neck's side face
-            for y_c, up in ((y_top, +1), (y_plate, -1)):
+            x_c = x + sign * p.stem_w / 2
+            for y_c, up in ((y_top, +1), (y_attach, -1)):
                 if p.fillet_r <= 0:
                     continue
-                # fillet material: a square in the free quadrant minus the circle tangent to both faces
                 x0, x1 = sorted((x_c, x_c + sign * p.fillet_r))
                 y0, y1 = sorted((y_c, y_c + up * p.fillet_r))
                 square = Rectangle(x1 - x0, y1 - y0, align=(Align.MIN, Align.MIN)).moved(Location((x0, y0)))
                 circle = Circle(p.fillet_r).moved(Location((x_c + sign * p.fillet_r, y_c + up * p.fillet_r)))
                 out = _sk(out + _sk(square - circle))
-    # round the plate's top corners
-    r = p.plate_t / 2
-    for sign in (-1, 1):
-        corner = Rectangle(r, r, align=(Align.MIN, Align.MIN)).moved(Location((sign * p.plate_w / 2 - (r if sign > 0 else 0), y_plate + p.plate_t - r)))
-        out = _sk(_sk(out - corner) + Circle(r).moved(Location((sign * (p.plate_w / 2 - r), y_plate + p.plate_t - r))))
+    return out
+
+
+def profile(p: ClipParams) -> Sketch:
+    """The clamp's cross-section: the Cs and necks under a common top plate."""
+    p.validate()
+    y_top = p.out_h / 2  # top of the largest C
+    y_plate = y_top + p.stem_h
+    plate = Rectangle(p.plate_w, p.plate_t, align=(Align.CENTER, Align.MIN)).moved(Location((0, y_plate)))
+    out = _sk(clips_profile(p, y_plate) + plate)
+    # male dovetail along the rails: a ridge in the profile
+    if p.dovetail_w > 0 and p.dovetail_along == "rails":
+        out = _sk(out + _dovetail_ridge(p, 0.0, y_plate + p.plate_t))
+    y_top_plate = y_plate + p.plate_t
+    # round the plate's four outer corners slightly (the butt against the
+    # clamp stays square in character)
+    r = p.corner_r
+    if r > 0:
+        for sign in (-1, 1):
+            x_edge = sign * p.plate_w / 2
+            for y_edge, up in ((y_top_plate, -1), (y_plate, +1)):
+                cx, cy = x_edge - sign * r, y_edge + up * r
+                x0, x1 = sorted((x_edge, cx)); y0, y1 = sorted((y_edge, cy))
+                corner = Rectangle(x1 - x0, y1 - y0, align=(Align.MIN, Align.MIN)).moved(Location((x0, y0)))
+                out = _sk(_sk(out - corner) + Circle(r).moved(Location((cx, cy))))
     assert len(out.faces()) == 1, "profile did not fuse into a single face"
     return out
 
 
+def plate_top(p: ClipParams) -> float:
+    return p.out_h / 2 + p.stem_h + p.plate_t
+
+
+def _label_cut(p: ClipParams) -> Part | None:
+    if not p.label:
+        return None
+    y_mid = p.out_h / 2 + p.stem_h + p.plate_t / 2
+    size = min(p.label_size, p.plate_t - 0.8)
+    plane = Plane(origin=(0, y_mid, p.length), x_dir=(1, 0, 0), z_dir=(0, 0, 1))
+    text = plane * Text(p.label, font_size=size, font_style=FontStyle.BOLD)
+    return extrude(text, amount=-p.label_depth)
+
+
 def clip(p: ClipParams) -> Part:
-    return extrude(profile(p), amount=p.length, dir=(0, 0, 1))
+    body = extrude(profile(p), amount=p.length, dir=(0, 0, 1))
+    cut = _label_cut(p)
+    if cut is not None:
+        body = body - cut
+    if p.dovetail_w > 0 and p.dovetail_along == "beam":
+        # ridge across the plate: drawn in the (z, y) plane and extruded along x
+        ridge = extrude(_zy_plane(p.plate_w / 2) * _dovetail_ridge(p, p.length / 2, plate_top(p)), amount=p.plate_w, dir=(-1, 0, 0))
+        body = body + ridge
+    return body
+
+
+def _zy_plane(x: float) -> Plane:
+    """A plane at world x whose local x is world z and local y is world y
+    (normal -x, so the right-hand rule keeps y pointing up)."""
+    return Plane(origin=(x, 0, 0), x_dir=(0, 0, 1), z_dir=(-1, 0, 0))
 
 
 def rail_solids(p: ClipParams, margin: float = 10.0) -> list[Part]:
@@ -364,6 +520,23 @@ def rail_solids(p: ClipParams, margin: float = 10.0) -> list[Part]:
         sec = q.section().moved(Location((p.rail_x(i), y, -margin)))
         out.append(extrude(sec, amount=p.length + 2 * margin, dir=(0, 0, 1)))
     return out
+
+
+def beam_socket(p: ClipParams, clearance: float = 0.15, length: float = 30.0) -> Part:
+    """A block standing in for the beam clamp's base, with the female groove
+    (grown by the clearance) cut up into its underside, seated on the ridge
+    with the clearance under the base. For checking the fit: it runs along
+    z for "rails", along x for "beam"."""
+    y_base = plate_top(p) + clearance  # underside of the beam clamp
+    depth = p.dovetail_h + clearance + 3
+    if p.dovetail_along == "rails":
+        block = Rectangle(p.dovetail_w + 10, depth, align=(Align.CENTER, Align.MIN)).moved(Location((0, y_base)))
+        sec = _sk(block - _dovetail_ridge(p, 0.0, y_base, clearance))
+        return extrude(sec.moved(Location((0, 0, -5))), amount=p.length + 10, dir=(0, 0, 1))
+    zc = p.length / 2
+    block = Rectangle(p.dovetail_w + 10, depth, align=(Align.CENTER, Align.MIN)).moved(Location((zc, y_base)))
+    sec = _sk(block - _dovetail_ridge(p, zc, y_base, clearance))
+    return extrude(_zy_plane(length / 2) * sec, amount=length, dir=(-1, 0, 0))
 
 
 def _cli() -> argparse.ArgumentParser:

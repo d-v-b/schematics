@@ -69,3 +69,17 @@ def test_beam_is_seated_between_the_bases():
     assert bb.min.Y == pytest.approx(p.seat, abs=TOL)
     assert bb.max.Y == pytest.approx(p.span_h - p.seat, abs=TOL)
     assert p.seat > 0
+
+
+def test_hanger_stacks_without_interference():
+    """Beam, beam clamp halves, rail clamp on the dovetail, rails in the clamp."""
+    from assembly import bodies
+
+    p = beam_bolt.BoltParams(rails="outer,outer", length=30)
+    both = interference("hanger", p)
+    for name in ("lower", "upper", "bolts", "rails", "bolts/lower", "bolts/upper", "rails/lower", "lower/upper"):
+        assert both[name] == pytest.approx(0, abs=TOL), name
+    # and the rails hang below the beam, inside the fused clamps
+    d = dict(bodies("hanger", p))
+    assert d["rails"].bounding_box().max.Y < 0
+    assert d["lower"].bounding_box().min.Y < d["rails"].bounding_box().min.Y

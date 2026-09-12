@@ -32,6 +32,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from build123d import (
@@ -48,7 +49,7 @@ from build123d import (
     mirror,
 )
 
-from beam_clamp import _elbow, _sk, run_cli, seat_offset
+from beam_clamp import _elbow, _sk, run_cli, seat_offset, top_face_label, validate_dovetail, with_base_dovetail
 from beam_wrap import _rect
 
 
@@ -71,20 +72,43 @@ class BoltParams:
     # Gap between a finger's tip and the other half's shoulder when the joint
     # is cinched as far as the slots allow.
     tip_gap: float = 0.5
-    # Height over which the arm tapers from length down to the finger. 0 = a
-    # square step (an upward-facing face either way, so both print fine).
+    # Height over which the arm tapers from length down to the finger, as a
+    # cosine curve. The finger's tip descends with the same curve and ends in
+    # a rounded nose of radius tip_r (no feather edge), stopping short enough
+    # that the nose clears the other half's taper even at full cinch. 0 = a
+    # square step (upward-facing faces either way).
     taper_len: float = 25.0
+    tip_r: float = 1.5
     # Bolt: nominal diameter and hole clearance. Bolts run along the beam.
     bolt_d: float = 2.0
     hole_clearance: float = 0.3
     # Least material allowed either side of the slot, across the wall and
     # beyond the slot ends.
     min_slot_wall: float = 1.2
-    # Slot length along the arm. Travel each way is slot_len - hole_d.
-    slot_len: float = 8.0
+    # Slot length along the arm. Only one half needs the slot (the upper,
+    # plain one); the half carrying the rail clamps gets a plain hole
+    # (bolt_slot = 0). The bolt sits in the hole, so the pair's travel each
+    # way is half the slot's free length, (slot_len - hole_d) / 2, and both
+    # halves' finger clearances use it.
+    slot_len: float = 13.7
+    bolt_slot: int = 1
     # Bolts per joint, spaced along the arm.
     n_bolts: int = 1
     bolt_spacing: float = 10.0
+    # Female dovetail groove in the underside of the base, running along the
+    # beam (see beam_clamp.py). Width at the wide end; 0 = none.
+    dovetail_w: float = 0.0
+    dovetail_h: float = 3.0
+    dovetail_angle: float = 12.0
+    dovetail_clearance: float = -0.025
+    # Curtain rail clamps fused to the underside of the base (see
+    # rail_clamp.py): rail section per C, comma-separated, empty = none. The
+    # lower half carries them; the upper half is plain.
+    rails: str = ""
+    rail_spacing: float = 40.0
+    rail_wall: float = 2.0
+    rail_opening: float = 10.0
+    rail_clearance: float = 0.0
     label: str = ""
     label_depth: float = 0.4
     label_size: float = 5.0
@@ -117,8 +141,9 @@ class BoltParams:
 
     @property
     def slot_travel(self) -> float:
-        """How far the joint can move from nominal in each direction."""
-        return self.slot_len - self.hole_d
+        """How far the joint can move from nominal in each direction: the bolt
+        is fixed by the hole in one half and rides the other half's slot."""
+        return (self.slot_len - self.hole_d) / 2
 
     @property
     def shoulder(self) -> float:
@@ -129,8 +154,27 @@ class BoltParams:
 
     @property
     def arm_len(self) -> float:
-        """Reach of each arm (the finger tip)."""
+        """Reach of each arm's full-thickness finger."""
         return self.shoulder + self.lap_len
+
+    @property
+    def tip_curve_len(self) -> float:
+        """Length of the tip's descending cosine, from the finger to the nose.
+        Shorter than the taper by how far before the mating taper's end its
+        curve is still above the nose (plus a little margin)."""
+        if self.taper_len <= 0:
+            return 0.0
+        rise = self.length - self.finger_len  # what the mating taper spans
+        need = min(1.0, (self.tip_r + 0.3) * 2 / rise)
+        delta = self.taper_len / math.pi * math.acos(1 - need)
+        return max(0.0, self.taper_len - delta)
+
+    @property
+    def tip_end(self) -> float:
+        """The arm's true end: the nose's far edge (a square step has no nose)."""
+        if self.taper_len <= 0:
+            return self.arm_len
+        return self.arm_len + self.tip_curve_len + self.tip_r
 
     @property
     def slot_y(self) -> float:
@@ -142,9 +186,28 @@ class BoltParams:
             self.slot_y + (i - (self.n_bolts - 1) / 2) * self.bolt_spacing for i in range(self.n_bolts)
         ]
 
+    def rail_clamp_params(self):
+        """The rail clamps hung from this half's base, or None."""
+        if not self.rails:
+            return None
+        from rail_clamp import ClipParams
+
+        return ClipParams(
+            tubes=self.rails, spacing=self.rail_spacing, wall=self.rail_wall, opening=self.rail_opening,
+            clearance=self.rail_clearance, length=self.length, dovetail_w=0, mate_w=0, min_safety=0,
+        )
+
     def validate(self) -> None:
         if self.wall <= 0:
             raise ValueError(f"wall must be positive, got {self.wall}")
+        rc = self.rail_clamp_params()
+        if rc is not None:
+            need = (rc.n_rails - 1) * rc.spacing + rc.stem_w + 2 * rc.fillet_r
+            flat = self.inner_w - 2 * self.fillet_r
+            if need > flat:
+                raise ValueError(f"the rail clamps' necks ({need:.1f} mm) do not fit on the base's flat underside ({flat:.1f} mm)")
+            if self.dovetail_w > 0:
+                raise ValueError("a half carrying rail clamps cannot also have a dovetail groove")
         if self.inner_w <= 2 * self.fillet_r:
             raise ValueError(
                 f"inner span {self.inner_w} must exceed twice the fillet radius {self.fillet_r}"
@@ -163,6 +226,12 @@ class BoltParams:
             )
         if self.shoulder - self.taper_len <= self.fillet_r:
             raise ValueError("arms are too short for the lap and taper: reduce lap_len or taper_len")
+        if self.tip_r < 0 or (self.taper_len > 0 and self.tip_r > self.finger_len):
+            raise ValueError("tip_r must be between 0 and the finger's length along the beam")
+        if self.taper_len > 0 and self.tip_curve_len <= 0:
+            raise ValueError("the nose is too big for the taper: reduce tip_r or lengthen taper_len")
+        if self.tip_end + self.tip_gap > self.span_h - (self.shoulder - self.taper_len) + 1e-9:
+            raise ValueError("the finger's tip would reach the other half's full-length section")
         ys = self.bolt_ys()
         lo = min(ys) - self.slot_len / 2 - self.min_slot_wall
         hi = max(ys) + self.slot_len / 2 + self.min_slot_wall
@@ -170,17 +239,19 @@ class BoltParams:
             raise ValueError("lap_len is too short for the slots")
         if self.label and self.label_depth >= self.wall:
             raise ValueError(f"label_depth {self.label_depth} must be less than wall {self.wall}")
+        validate_dovetail(self)
 
 
 def _arm(p: BoltParams) -> Sketch:
     """Left arm profile: a plain wall from the elbow to the finger tip, minus
     the slots on the wall's centreline."""
-    arm = _rect(-p.wall, p.fillet_r, 0, p.arm_len)
+    arm = _rect(-p.wall, p.fillet_r, 0, p.tip_end)
     for y in p.bolt_ys():
-        slot = SlotCenterToCenter(p.slot_len - p.hole_d, p.hole_d, rotation=90).moved(
-            Location((-p.wall / 2, y))
-        )
-        arm = _sk(arm - slot)
+        if p.bolt_slot:
+            cut = SlotCenterToCenter(p.slot_len - p.hole_d, p.hole_d, rotation=90).moved(Location((-p.wall / 2, y)))
+        else:
+            cut = Circle(p.hole_d / 2).moved(Location((-p.wall / 2, y)))
+        arm = _sk(arm - cut)
     return arm
 
 
@@ -190,7 +261,13 @@ def profile(p: BoltParams) -> Sketch:
     base = _rect(p.fillet_r, -p.wall, p.inner_w - p.fillet_r, 0)
     left = _sk(_elbow(p) + _arm(p))
     right = _sk(mirror(left, about=Plane.YZ.offset(p.inner_w / 2)))
-    merged = _sk(base + left + right)
+    merged = with_base_dovetail(_sk(base + left + right), p)
+    rc = p.rail_clamp_params()
+    if rc is not None and not p.coupon:
+        # the rail clamps hang from the base's underside by their necks
+        from rail_clamp import clips_profile
+
+        merged = _sk(merged + clips_profile(rc, -p.wall).moved(Location((p.inner_w / 2, 0))))
     if p.coupon:
         band = _rect(-2 * p.beam_w, p.shoulder - p.taper_len - p.coupon_stub, 3 * p.beam_w, p.span_h)
         merged = _sk(merged & band)
@@ -205,8 +282,21 @@ def _finger_cuts(p: BoltParams) -> Part:
     along the beam, with a taper leading into it. Drawn in the (y, z) plane
     and extruded along x across each wall."""
     L, e, f = p.length, 1.0, p.finger_len
-    y_t0, y_s, y_tip = p.shoulder - p.taper_len, p.shoulder, p.arm_len + e
-    poly = Polygon((y_t0, L + e), (y_s, f), (y_tip, f), (y_tip, L + e), align=None)
+    y_t0, y_s, y_a, y_end = p.shoulder - p.taper_len, p.shoulder, p.arm_len, p.tip_end
+    n = 24
+
+    def cosine(y0: float, y1: float, z0: float, z1: float):
+        return [(y0 + (y1 - y0) * k / n, z1 + (z0 - z1) * (1 + math.cos(math.pi * k / n)) / 2) for k in range(n + 1)]
+
+    if p.taper_len > 0:
+        # the top boundary: full length, cosine down to the finger, the
+        # finger, the same cosine down to the nose, and a quarter round nose
+        y_c = y_a + p.tip_curve_len
+        nose = [(y_c + p.tip_r * math.sin(t), p.tip_r * math.cos(t)) for t in [math.pi / 2 * k / 12 for k in range(1, 13)]]
+        boundary = cosine(y_t0, y_s, L, f) + cosine(y_a, y_c, f, p.tip_r) + nose
+    else:
+        boundary = [(y_s, L), (y_s, f), (y_a, f), (y_a, 0.0)]
+    poly = Polygon((y_t0, L + e), *boundary, (y_end, -e), (y_end + e, -e), (y_end + e, L + e), align=None)
 
     def cut(x0: float) -> Part:
         plane = Plane(origin=(x0, 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))  # local (y, z)
@@ -216,8 +306,16 @@ def _finger_cuts(p: BoltParams) -> Part:
 
 
 def _label_cut(p: BoltParams) -> Part | None:
-    if not p.label or p.coupon:
+    if not p.label:
         return None
+    if p.coupon:
+        # coupons are short along the beam: engrave the ID on the top face,
+        # along the left arm's stub
+        return top_face_label(p, -p.wall / 2, p.shoulder - p.taper_len - p.coupon_stub / 2, along="y", size=max(1.5, p.wall - 1.5))
+    if p.length < p.label_size + 1.0:
+        # too short along the beam for text on the base's outer face: engrave
+        # it on the top face instead, across the base
+        return top_face_label(p, p.inner_w / 2, -p.wall / 2, along="x", size=max(1.5, p.wall - 1.5))
     face_plane = Plane(
         origin=(p.inner_w / 2, -p.wall, p.length / 2), x_dir=(1, 0, 0), z_dir=(0, -1, 0)
     )
@@ -256,11 +354,24 @@ def bolt_shafts(p: BoltParams, dy: float = 0.0) -> Part:
     shafts = None
     for y in p.bolt_ys():
         for x in (-p.wall / 2, p.inner_w + p.wall / 2):
+            # a hole on this half fixes the bolt; two slots share the shift
+            y_bolt = y if not p.bolt_slot else y + dy / 2
             c = extrude(
-                Circle(p.bolt_d / 2).moved(Location((x, y + dy / 2, -1))), amount=p.length + 2, dir=(0, 0, 1)
+                Circle(p.bolt_d / 2).moved(Location((x, y_bolt, -1))), amount=p.length + 2, dir=(0, 0, 1)
             )
             shafts = c if shafts is None else shafts + c
     return shafts
+
+
+def fused_rails(p: BoltParams) -> list[Part]:
+    """The curtain rails seated in this half's fused rail clamps."""
+    from rail_clamp import rail_solids
+
+    rc = p.rail_clamp_params()
+    if rc is None:
+        return []
+    shift = Location((p.inner_w / 2, -p.wall - (rc.out_h / 2 + rc.stem_h), 0))
+    return [r.moved(shift) for r in rail_solids(rc)]
 
 
 def export_assembly_svg(p: BoltParams, path: str) -> None:

@@ -1,4 +1,7 @@
-"""Assemble each model around a solid beam, for sanity checking.
+"""Assemble each model around a solid beam, for sanity checking, and the whole
+curtain hanger: beam, bolted beam clamp halves with their bolts, the rail
+clamps fused to the lower half's base, and the two curtain rails snapped
+into them.
 
 Builds the beam as a box the size of the real cross-section, seats it on the
 lower half's fillets (see ``seat_offset`` in beam_clamp.py), places the parts
@@ -10,7 +13,11 @@ around it, and writes:
     isometric view, hidden lines dashed
 
 Usage:
-    python assembly.py clamp|wrap|bolt [-o outdir] [--param value ...]
+    python assembly.py clamp|wrap|bolt|flex|hanger [-o outdir] [--param value ...]
+
+``hanger`` takes the bolt model's parameters; give it ``rails`` (e.g.
+``outer,outer``) and the lower half is rendered with the rail clamps fused to
+its base, the upper half plain.
 """
 
 from __future__ import annotations
@@ -26,18 +33,28 @@ import beam_bolt
 import beam_clamp
 import beam_flex
 import beam_wrap
+import rail_clamp
 
 MODELS = {
     "clamp": (beam_clamp.ClampParams, lambda p: [("clamp", beam_clamp.clamp(p))]),
     "wrap": (beam_wrap.WrapParams, lambda p: list(zip(("lower", "upper"), beam_wrap.assembly(p)))),
     "flex": (beam_flex.FlexParams, lambda p: list(zip(("lower", "upper"), beam_flex.assembly(p)))),
+    "hanger": (beam_bolt.BoltParams, lambda p: hanger_bodies(p)),
     "bolt": (
         beam_bolt.BoltParams,
         lambda p: list(zip(("lower", "upper"), beam_bolt.assembly(p))) + [("bolts", beam_bolt.bolt_shafts(p))],
     ),
 }
 BEAM_H = 206.5  # for the single clamp, whose params do not carry the beam height
-COLORS = {"beam": (0.76, 0.6, 0.42), "clamp": (0.9, 0.7, 0.1), "lower": (0.9, 0.7, 0.1), "upper": (0.27, 0.51, 0.71), "bolts": (0.8, 0.1, 0.1)}
+COLORS = {
+    "beam": (0.76, 0.6, 0.42),
+    "clamp": (0.9, 0.7, 0.1),
+    "lower": (0.9, 0.7, 0.1),
+    "upper": (0.27, 0.51, 0.71),
+    "bolts": (0.8, 0.1, 0.1),
+    "rail_clamp": (0.35, 0.65, 0.35),
+    "rails": (0.7, 0.7, 0.72),
+}
 
 
 def beam(p, margin: float = 15.0) -> Part:
@@ -50,20 +67,43 @@ def beam(p, margin: float = 15.0) -> Part:
     )
 
 
+def hanger_bodies(p) -> list[tuple[str, Part]]:
+    """The lower half carries the fused rail clamps; the upper half is the
+    same bolt wrap without them."""
+    if not p.rails:
+        raise ValueError("the hanger needs rail clamps on the lower half: set rails, e.g. 'outer,outer'")
+    lower = beam_bolt.half(beam_bolt.BoltParams(**{**{f.name: getattr(p, f.name) for f in fields(beam_bolt.BoltParams)}, "bolt_slot": 0}))
+    plain = beam_bolt.BoltParams(**{**{f.name: getattr(p, f.name) for f in fields(beam_bolt.BoltParams)}, "rails": "", "label": "", "bolt_slot": 1})
+    upper = beam_bolt.half(plain).moved(beam_bolt.mate_location(p))
+    rails = None
+    for r in beam_bolt.fused_rails(p):
+        rails = r if rails is None else rails + r
+    return [("lower", lower), ("upper", upper), ("bolts", beam_bolt.bolt_shafts(p)), ("rails", rails)]
+
+
 def bodies(model: str, p) -> list[tuple[str, Part]]:
     """(name, solid) for every body in the assembly, beam first."""
     _, build = MODELS[model]
     return [("beam", beam(p))] + build(p)
 
 
+def _vol(a, b) -> float:
+    r = a & b
+    return r.volume if hasattr(r, "volume") else sum(s.volume for s in r)
+
+
 def interference(model: str, p) -> dict[str, float]:
-    """Volume of overlap between the beam and each part."""
+    """Volume of overlap between the beam and each part; for the hanger also
+    between the rail clamp and the beam clamp, and the rails and everything."""
     parts = bodies(model, p)
     bm = parts[0][1]
-    out = {}
-    for name, shape in parts[1:]:
-        r = bm & shape
-        out[name] = r.volume if hasattr(r, "volume") else sum(s.volume for s in r)
+    out = {name: _vol(bm, shape) for name, shape in parts[1:]}
+    if model == "hanger":
+        d = dict(parts)
+        out["bolts/lower"] = _vol(d["bolts"], d["lower"])
+        out["bolts/upper"] = _vol(d["bolts"], d["upper"])
+        out["rails/lower"] = _vol(d["rails"], d["lower"])
+        out["lower/upper"] = _vol(d["lower"], d["upper"])
     return out
 
 
@@ -106,7 +146,8 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv[1:])
     p = params_cls(**{f.name: getattr(args, f.name) for f in fields(params_cls)})
     for name, vol in interference(model, p).items():
-        print(f"beam / {name} overlap: {vol:.2f} mm^3")
+        label = name if "/" in name else f"beam / {name}"
+        print(f"{label} overlap: {vol:.2f} mm^3")
     for path in export(model, p, args.outdir):
         print(f"-> {path}")
 

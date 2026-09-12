@@ -85,3 +85,36 @@ def test_rejects_bump_off_the_arm():
 def test_rejects_label_deeper_than_wall():
     with pytest.raises(ValueError, match="label_depth"):
         profile(ClampParams(label="x", label_depth=3, wall=2))
+
+
+@pytest.mark.parametrize("dovetail_w", [16.0, 32.0])
+def test_base_dovetail_groove(dovetail_w):
+    import math
+
+    p = ClampParams(wall=5, dovetail_w=dovetail_w, length=10)
+    part = clamp(p)
+    assert part.is_valid()
+    # the groove is cut up into the base: nothing protrudes below it
+    assert part.bounding_box().min.Y == pytest.approx(-p.wall, abs=1e-4)
+    # and it removes a trapezoid of the clearance-grown size
+    hh = p.dovetail_h + p.dovetail_clearance
+    wt = dovetail_w + 2 * p.dovetail_clearance
+    wn = wt - 2 * hh * math.tan(math.radians(p.dovetail_angle))
+    plain = profile(ClampParams(wall=5, length=10)).area
+    assert plain - profile(p).area == pytest.approx((wt + wn) / 2 * hh, rel=1e-3)
+    assert_printable(part)
+
+
+def test_rejects_dovetail_wider_than_the_base():
+    with pytest.raises(ValueError, match="flat underside"):
+        profile(ClampParams(wall=5, dovetail_w=50))
+
+
+def test_rejects_dovetail_with_no_neck():
+    with pytest.raises(ValueError, match="neck is too narrow"):
+        profile(ClampParams(wall=5, dovetail_w=4, dovetail_h=2.5, dovetail_angle=40))
+
+
+def test_rejects_groove_through_the_base():
+    with pytest.raises(ValueError, match="at least 1 mm"):
+        profile(ClampParams(wall=3, dovetail_w=42))

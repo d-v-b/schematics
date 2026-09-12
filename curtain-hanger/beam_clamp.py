@@ -25,6 +25,7 @@ from pathlib import Path
 
 from build123d import (
     Align,
+    Polygon,
     Axis,
     Circle,
     Compound,
@@ -82,6 +83,16 @@ class ClampParams:
     label_depth: float = 0.4
     # Text height.
     label_size: float = 5.0
+    # Female dovetail groove in the underside of the base, running along the
+    # beam, for hanging things from the clamp: the curtain rail clamp's male
+    # dovetail slides into it. Width at the wide (inner) end; 0 = none.
+    # Depth, flank angle from vertical, and clearance added all round. The
+    # printer cuts grooves oversize: 0.05 measured 0.15 mm of play, so the
+    # modelled clearance is negative to land on a snug sliding fit.
+    dovetail_w: float = 0.0
+    dovetail_h: float = 3.0
+    dovetail_angle: float = 12.0
+    dovetail_clearance: float = -0.025
 
     @property
     def inner_w(self) -> float:
@@ -109,11 +120,73 @@ class ClampParams:
             raise ValueError("bump does not fit on the straight part of the arm")
         if self.label and self.label_depth >= self.wall:
             raise ValueError(f"label_depth {self.label_depth} must be less than wall {self.wall}")
+        validate_dovetail(self)
 
 
 def _sk(shape) -> Sketch:
     """Normalise an algebra result (Face, Compound or list) to a single Sketch."""
     return Sketch(list(shape.faces()))
+
+
+def dovetail_profile(w: float, h: float, angle: float, x0: float, y0: float, clearance: float = 0.0) -> Sketch:
+    """A dovetail cross-section: a trapezoid with its narrow neck on the line
+    y = y0 and its wide end of width w at y0 + h, flanks `angle` degrees
+    from vertical, centred on x0. Used as the groove cut up into a beam
+    clamp's base (y0 = the underside) and as the ridge standing on the rail
+    clamp's plate (y0 = the plate top). A positive clearance grows it by that
+    much all round, for the female side."""
+    t = math.tan(math.radians(angle))
+    hh = h + clearance
+    wt = w + 2 * clearance
+    wn = wt - 2 * hh * t
+    # counter-clockwise so the face normal is +Z and booleans behave
+    pts = [(x0 - wn / 2, y0 - 1e-3), (x0 + wn / 2, y0 - 1e-3), (x0 + wt / 2, y0 + hh), (x0 - wt / 2, y0 + hh)]
+    return _sk(Polygon(*pts, align=None))
+
+
+def validate_dovetail(p) -> None:
+    """Shared checks for the female base groove on any of the beam models."""
+    if p.dovetail_w < 0 or p.dovetail_h < 0:
+        raise ValueError("dovetail dimensions must be non-negative")
+    if p.dovetail_clearance < -0.2:
+        raise ValueError("dovetail_clearance below -0.2 mm is more than print oversize can absorb")
+    if p.dovetail_w > 0:
+        if not 0 < p.dovetail_angle < 45:
+            raise ValueError("dovetail_angle must be between 0 and 45 degrees from vertical")
+        flat = p.inner_w - 2 * p.fillet_r  # the base's flat underside between the elbow rounds
+        if p.dovetail_w + 2 * p.dovetail_clearance + 2 > flat:
+            raise ValueError(f"dovetail_w {p.dovetail_w} must fit on the base's flat underside ({flat:.1f} mm) with material beside it")
+        if p.dovetail_w - 2 * p.dovetail_h * math.tan(math.radians(p.dovetail_angle)) < 2:
+            raise ValueError("dovetail neck is too narrow: lower dovetail_h or dovetail_angle")
+        floor = p.wall - p.dovetail_h - p.dovetail_clearance
+        if floor < 1.0:
+            raise ValueError(
+                f"the groove leaves only {floor:.2f} mm of base above it; keep at least 1 mm (thicken the wall or shallow the groove)"
+            )
+
+
+def top_face_label(p, x: float, y: float, along: str = "y", size: float | None = None) -> Part | None:
+    """Text engraved into the part's top face when printed (the profile face
+    at z = length), centred on (x, y), reading along +x or along +y (for a
+    narrow arm). Used to put an ID on coupons, which are too short along the
+    beam to carry text on their sides."""
+    if not p.label:
+        return None
+    size = p.label_size if size is None else size
+    x_dir = (0, 1, 0) if along == "y" else (1, 0, 0)
+    plane = Plane(origin=(x, y, p.length), x_dir=x_dir, z_dir=(0, 0, 1))
+    text = plane * Text(p.label, font_size=size, font_style=FontStyle.BOLD)
+    return extrude(text, amount=-p.label_depth)
+
+
+def with_base_dovetail(profile_sketch: Sketch, p) -> Sketch:
+    """Cut the female groove up into the base's underside at y = -wall."""
+    if p.dovetail_w <= 0:
+        return profile_sketch
+    groove = dovetail_profile(
+        p.dovetail_w, p.dovetail_h, p.dovetail_angle, p.inner_w / 2, -p.wall, p.dovetail_clearance
+    )
+    return _sk(profile_sketch - groove)
 
 
 def _elbow(p: ClampParams) -> Sketch:
@@ -162,7 +235,7 @@ def profile(p: ClampParams) -> Sketch:
         left = left + bump
     left = _sk(left)  # Face + Sketch does not fuse; keep everything a Sketch
     right = mirror(left, about=Plane.YZ.offset(p.inner_w / 2))
-    merged = _sk(base + left + right)
+    merged = with_base_dovetail(_sk(base + left + right), p)
     assert len(merged.faces()) == 1, "profile did not fuse into a single face"
     return merged
 

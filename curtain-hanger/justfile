@@ -1,10 +1,19 @@
-# Dev actions for the beam clamp and beam wrap. Run `just` to list them.
+# Dev actions for the curtain hanger: a bolted beam wrap whose lower half carries
+# the curtain rail clamps fused to its base, and their assembly. Run `just` to list them.
 #
 # Sweep and full-scale values live at the top of this file; edit them once you
 # know what fits. Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
 
 python := env("PYTHON", "python")
 out := "stl"
+
+# --- Rail clamps fused to the lower bolt half's base (the upper half is plain)
+rails := "outer,outer"      # rail section under each C, left to right
+rail_spacing := "40"        # rail centre-to-centre, mm
+rail_wall := "2.0"          # C thickness, mm; 1.2 gripped too weakly on curtains
+rail_opening := "10"        # gap between the lip tips, mm (rail is 19.5); 10 gripped best
+rail_clearance := "0"       # cavity minus rail, mm (negative = squeeze)
+fused_args := "--rails " + rails + " --rail_spacing " + rail_spacing + " --rail_wall " + rail_wall + " --rail_opening " + rail_opening + " --rail_clearance " + rail_clearance
 
 # --- Clamp, phase 1: prototype sweep -------------------------------------
 proto_walls := "2 3 4"              # wall thickness, mm
@@ -36,13 +45,19 @@ bolt_args := "--wall " + bolt_wall + " --clearance " + bolt_clearance
 
 # --- Flex: joint coupons and full halves ----------------------------------
 flex_clearances := "-0.3 0.0 0.2"      # joint_clearance between the nested laps, mm (negative = preload)
-flex_tooth_hs := "0.6 0.8"             # tooth_h, mm
+flex_tooth_hs := "1.5 2.0"             # tooth_h, mm; 0.8 did not print
 flex_coupon_length := "10"
 flex_wall := "5"
 flex_clearance := "0.3"
 flex_joint_clearance := "-0.3"
 flex_length := "10"                    # 10 for the test print; 50 for the real part
 flex_args := "--wall " + flex_wall + " --clearance " + flex_clearance
+
+# --- Stand-alone rail clamp (plate version, kept for reference and coupons)
+rail_coupon_length := "3"           # fit-check coupons only need a few mm
+rail_sweep_walls := "1.5 2.0"
+rail_sweep_openings := "15 14 13 12 11 10"
+rail_args := "--tubes " + rails + " --spacing " + rail_spacing + " --clearance " + rail_clearance + " --min_safety 0"
 
 default:
     @just --list
@@ -66,6 +81,11 @@ render-bolt outfile *args:
 [positional-arguments]
 render-flex outfile *args:
     {{python}} beam_flex.py -o "$@"
+
+# Render one rail clamp (.stl, .step or .svg) with any --param overrides
+[positional-arguments]
+render-rail outfile *args:
+    {{python}} rail_clamp.py -o "$@"
 
 # Clamp phase 1: render the labelled fit-test sweep into {{out}}/
 proto:
@@ -91,7 +111,7 @@ wrap-coupon:
         for th in {{coupon_tooth_hs}}; do
             just render-wrap "{{out}}/wrap_coupon_w{{wrap_wall}}_jc${jc}_th${th}.stl" \
                 --wall {{wrap_wall}} --clearance {{wrap_clearance}} --joint_clearance "$jc" \
-                --tooth_h "$th" --length {{coupon_length}} --coupon 1
+                --tooth_h "$th" --length {{coupon_length}} --coupon 1 --label "jc$jc th$th"
         done
     done
 
@@ -107,12 +127,14 @@ bolt-coupon:
     set -euo pipefail
     for jc in {{bolt_clearances}}; do
         just render-bolt "{{out}}/bolt_coupon_w{{bolt_wall}}_jc${jc}.stl" \
-            {{bolt_args}} --joint_clearance "$jc" --length {{bolt_coupon_length}} --coupon 1
+            {{bolt_args}} --joint_clearance "$jc" --length {{bolt_coupon_length}} --coupon 1 --label "jc$jc"
     done
 
-# Bolt phase 2: one full-scale bolted half (print two)
+# Bolt phase 2: the hanger's two halves, full scale: lower with the rail clamps fused on, upper plain
 bolt:
-    just render-bolt "{{out}}/beam_bolt_w{{bolt_wall}}_c{{bolt_clearance}}_jc{{bolt_joint_clearance}}_L{{bolt_length}}.stl" \
+    just render-bolt "{{out}}/hanger_lower_w{{bolt_wall}}_c{{bolt_clearance}}_jc{{bolt_joint_clearance}}_L{{bolt_length}}.stl" \
+        {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}} {{fused_args}} --bolt_slot 0
+    just render-bolt "{{out}}/hanger_upper_w{{bolt_wall}}_c{{bolt_clearance}}_jc{{bolt_joint_clearance}}_L{{bolt_length}}.stl" \
         {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}}
 
 # Flex phase 1: joint coupons over joint_clearance x tooth_h. Print each twice to get two mating pairs.
@@ -122,7 +144,7 @@ flex-coupon:
     for jc in {{flex_clearances}}; do
         for th in {{flex_tooth_hs}}; do
             just render-flex "{{out}}/flex_coupon_w{{flex_wall}}_jc${jc}_th${th}.stl" \
-                {{flex_args}} --joint_clearance "$jc" --tooth_h "$th" --length {{flex_coupon_length}} --coupon 1
+                {{flex_args}} --joint_clearance "$jc" --tooth_h "$th" --length {{flex_coupon_length}} --coupon 1 --label "jc$jc th$th"
         done
     done
 
@@ -131,8 +153,40 @@ flex:
     just render-flex "{{out}}/beam_flex_w{{flex_wall}}_c{{flex_clearance}}_jc{{flex_joint_clearance}}_L{{flex_length}}.stl" \
         {{flex_args}} --joint_clearance {{flex_joint_clearance}} --length {{flex_length}}
 
+# Rail clamp fit coupons: single Cs for each tube section over wall x opening, a few mm long
+rail_sweep_tubes := "outer inner"
+rail-coupons:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for t in {{rail_sweep_tubes}}; do
+        for w in {{rail_sweep_walls}}; do
+            for o in {{rail_sweep_openings}}; do
+                just render-rail "{{out}}/rail_coupon_${t}_w${w}_o${o}_c{{rail_clearance}}_L{{rail_coupon_length}}.stl" \
+                    --tubes "$t" --length {{rail_coupon_length}} --clearance {{rail_clearance}} --min_safety 0 \
+                    --wall "$w" --opening "$o" --label "${t:0:1} w$w o$o" || echo "  skipped $t w$w o$o: does not validate"
+            done
+        done
+    done
+
+# The stand-alone rail clamp (plate version) with the values above
+rail-clamp:
+    just render-rail "{{out}}/rail_clamp_{{rails}}_s{{rail_spacing}}_w{{rail_wall}}_o{{rail_opening}}_c{{rail_clearance}}_L{{bolt_length}}.stl" \
+        {{rail_args}} --wall {{rail_wall}} --opening {{rail_opening}} --length {{bolt_length}}
+
+# --- Thin test run: the hanger's two halves at test_length, to check the beam fit and rail grip
+test_length := "10"
+
+# Lower halves (rail clamps fused on: one for the rails' outer section, one for the inner) and the upper half, test_length long, with IDs
+test-run:
+    just render-bolt "{{out}}/testrun_lower_{{rails}}_L{{test_length}}.stl" {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} \
+        --length {{test_length}} {{fused_args}} --bolt_slot 0 --label "{{rails}} o{{rail_opening}}"
+    just render-bolt "{{out}}/testrun_lower_inner,inner_L{{test_length}}.stl" {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} \
+        --length {{test_length}} {{fused_args}} --rails inner,inner --bolt_slot 0 --label "inner o{{rail_opening}}"
+    just render-bolt "{{out}}/testrun_upper_L{{test_length}}.stl" {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} \
+        --length {{test_length}} --label "upper jc{{bolt_joint_clearance}}"
+
 # Render everything
-all: proto full wrap-coupon wrap bolt-coupon bolt flex-coupon flex
+all: proto full wrap-coupon wrap bolt-coupon bolt flex-coupon flex rail-coupons rail-clamp
 
 # Regenerate the drawings used by the README
 preview:
@@ -143,6 +197,9 @@ preview:
     {{python}} -c "from beam_bolt import BoltParams, export_assembly_svg; export_assembly_svg(BoltParams(), 'bolt_assembly.svg')"
     just render-flex flex_profile.svg {{flex_args}}
     {{python}} -c "from beam_flex import FlexParams, export_assembly_svg; export_assembly_svg(FlexParams(), 'flex_assembly.svg')"
+    {{python}} framfusig.py -o rail_profiles.svg
+    just render-rail rail_clamp_profile.svg {{rail_args}} --wall {{rail_wall}} --opening {{rail_opening}} --length {{bolt_length}}
+    just render-bolt hanger_profile.svg {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}} {{fused_args}}
 
 # Model each design assembled around a solid beam: STEP + STL + SVG views in assembly/
 assembly:
@@ -150,6 +207,7 @@ assembly:
     {{python}} assembly.py wrap
     {{python}} assembly.py bolt {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}}
     {{python}} assembly.py flex {{flex_args}} --joint_clearance {{flex_joint_clearance}} --length {{flex_length}}
+    {{python}} assembly.py hanger {{bolt_args}} --joint_clearance {{bolt_joint_clearance}} --length {{bolt_length}} {{fused_args}}
 
 # Run the geometry tests
 test:

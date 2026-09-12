@@ -40,7 +40,7 @@ def test_assembled_fit(wall, bolt_d, joint_clearance, length, taper_len):
     assert bb.min.X == pytest.approx(-wall, abs=TOL)
     assert bb.max.X == pytest.approx(p.inner_w + wall, abs=TOL)
     assert bb.min.Y == pytest.approx(-wall, abs=TOL)
-    assert bb.max.Y == pytest.approx(p.arm_len, abs=TOL)
+    assert bb.max.Y == pytest.approx(p.tip_end, abs=TOL)
 
     # a continuous band: both halves occupy exactly the same length along the beam
     for part in (lower, upper):
@@ -60,7 +60,8 @@ def test_assembled_fit(wall, bolt_d, joint_clearance, length, taper_len):
 
     # beyond the travel the bolt hits a slot end; well beyond it the finger
     # tips run into the tapers; along the beam the finger faces meet
-    assert _overlap(lower, bolt_shafts(p, p.slot_travel + 0.5 * p.hole_d)) > 0
+    # (this assembly has slots on both halves, so the pair's travel is doubled)
+    assert _overlap(lower, bolt_shafts(p, 2 * p.slot_travel + 0.5 * p.hole_d)) > 0
     over = p.slot_travel + p.tip_gap + 0.5 * taper_len + 1.0  # halfway up the taper
     assert _overlap(lower, upper.moved(Location((0, -over, 0)))) > 0
     assert _overlap(lower, upper.moved(Location((0, 0, -(joint_clearance + 0.1))))) > 0
@@ -74,7 +75,7 @@ def test_coupon_is_the_two_joint_pieces():
     assert len(pieces.solids()) == 2
     bb = pieces.bounding_box()
     assert bb.min.Y == pytest.approx(p.shoulder - p.taper_len - p.coupon_stub, abs=TOL)
-    assert bb.max.Y == pytest.approx(p.arm_len, abs=TOL)
+    assert bb.max.Y == pytest.approx(p.tip_end, abs=TOL)
     assert_printable(pieces)
 
 
@@ -126,3 +127,80 @@ def test_rejects_lap_too_short_for_slots():
 def test_rejects_label_deeper_than_wall():
     with pytest.raises(ValueError, match="label_depth"):
         profile(BoltParams(label="x", label_depth=5, wall=5))
+
+
+def test_base_dovetail_groove_stays_inside_the_base():
+    from assembly import interference
+
+    p = BoltParams(wall=5, dovetail_w=42, length=10)
+    lower, upper = assembly(p)
+    # the groove is cut into the base: the halves' envelope is unchanged
+    assert lower.bounding_box().min.Y == pytest.approx(-p.wall, abs=1e-4)
+    assert upper.bounding_box().max.Y == pytest.approx(p.span_h + p.wall, abs=1e-4)
+    assert lower.volume < assembly(BoltParams(wall=5, length=10))[0].volume
+    assert_printable(lower)
+    both = interference("bolt", p)
+    assert all(v == pytest.approx(0, abs=1e-3) for k, v in both.items() if k not in ("lower", "upper"))
+
+
+def test_fused_rail_clamps_hang_from_the_base():
+    from beam_bolt import fused_rails
+
+    p = BoltParams(rails="outer,outer", length=10)
+    body = half(p)
+    assert body.is_valid() and len(body.solids()) == 1
+    # the rails seat in the fused clamps without touching them, below the base
+    for rail in fused_rails(p):
+        assert _overlap(body, rail) == pytest.approx(0, abs=1e-3)
+        assert rail.bounding_box().max.Y < -p.wall
+    assert body.bounding_box().min.Y < -p.wall - 10
+    assert_printable(body)
+    # the plain half is the same part without them
+    assert half(BoltParams(length=10)).volume < body.volume
+
+
+def test_rejects_rail_clamps_off_the_base():
+    with pytest.raises(ValueError, match="flat underside"):
+        profile(BoltParams(rails="outer,outer", rail_spacing=50))
+
+
+def test_rejects_rail_clamps_with_a_dovetail():
+    with pytest.raises(ValueError, match="cannot also have a dovetail"):
+        profile(BoltParams(rails="outer,outer", dovetail_w=32))
+
+
+def test_lower_half_has_holes_and_the_upper_the_slot():
+    from beam_bolt import mate_location
+
+    q = BoltParams(length=10)
+    lower = half(BoltParams(length=10, bolt_slot=0))
+    upper = half(BoltParams(length=10, bolt_slot=1)).moved(mate_location(q))
+    # a hole removes less than a slot
+    assert lower.volume > half(BoltParams(length=10, bolt_slot=1)).volume
+    # the bolt sits in the lower's hole and rides the upper's slot across the travel
+    for dy in (-q.slot_travel, 0.0, q.slot_travel):
+        shafts = bolt_shafts(BoltParams(length=10, bolt_slot=0), dy)
+        assert _overlap(lower, shafts) == pytest.approx(0, abs=TOL)
+        assert _overlap(upper.moved(Location((0, dy, 0))), shafts) == pytest.approx(0, abs=TOL)
+        assert _overlap(lower, upper.moved(Location((0, dy, 0)))) == pytest.approx(0, abs=TOL)
+    assert _overlap(upper.moved(Location((0, q.slot_travel + 0.6, 0))), bolt_shafts(BoltParams(length=10, bolt_slot=0), q.slot_travel + 0.6)) > 0
+
+
+def test_taper_is_a_smooth_curve():
+    # the cosine taper removes the same area as a straight ramp but is tangent
+    # at both ends: its top face has no edge steeper than 45 degrees and its
+    # first and last facets are nearly flat
+    import math
+
+    p = BoltParams(length=50, taper_len=25)
+    body = half(p)
+    slopes = []
+    for f in body.faces():
+        n = f.normal_at()
+        # upward-facing facets of the shoulder taper only (the nose at the
+        # tip is deliberately steeper, rolling over to vertical)
+        if n.Z > 0.05 and abs(n.X) < 1e-6 and f.center().Y < p.arm_len:
+            slopes.append(math.degrees(math.atan2(abs(n.Y), n.Z)))
+    # a cosine's steepest point is pi/2 times the straight ramp's slope
+    assert 50 < max(slopes) < 65
+    assert min(slopes) < 8
