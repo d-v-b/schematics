@@ -19,22 +19,21 @@ its end swinging out past the bar's own width.
 | slot width | 6.6 mm (M6 clearance 6.4 + 0.2 print allowance) | `--slot_w` |
 | slot length | 30 mm overall, round ends | `--slot_l` |
 | slot pitch | 40 mm (so 10 mm of material between slots) | `--pitch` |
-| end margin | 20 mm (least distance from an end to a slot centre) | `--end_margin` |
+| end margin | 20 mm (square ends only: least distance from an end to a slot centre) | `--end_margin` |
 | slot count | as many as fit | `--slots` |
 | end cap radius | 20 mm (arc centred that far in from the tip; 20 = semicircle, 0 = square) | `--end_r` |
 | corner radius | 3 mm, where a larger end arc meets the sides | `--corner_r` |
 
-The row of slots is centred along the bar, so at the defaults a 200 mm bar
-gets five slots centred at 20, 60, 100, 140 and 180 mm, each reaching 5 mm
-short of the next. `--slots N` fixes the count instead. `--slot_l 6.6`
-(equal to the width) gives plain round holes. `--label "..."` engraves an
-ID into the top face beside the slots.
-
-The end arc's centre is the pivot the bar can turn on without its end
-reaching past the arc; at the defaults that is the first slot's centre. A
-larger `--end_r` gives a flatter end; the render then says whether a slot
-still covers the pivot (at `--end_r 40` it falls in the bridge between the
-first two slots unless you also pass `--end_margin 30`).
+The end slots are always centred on the end arcs' centres, since that is
+the pivot the bar can turn on without its end reaching past the arc. The
+length must therefore be two radii plus a whole number of pitches: at the
+defaults 200 mm gives five slots centred at 20, 60, 100, 140 and 180 mm,
+each reaching 5 mm short of the next, and 210 mm is refused with the
+nearest valid lengths named. `--slots N` fixes the count instead. With
+square ends (`--end_r 0`) the row is simply centred along the bar with at
+least `--end_margin` at each end. `--slot_l 6.6` (equal to the width)
+gives plain round holes. `--label "..."` engraves an ID into the top face
+beside the slots.
 
 ## Use
 

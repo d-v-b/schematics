@@ -11,10 +11,13 @@ is a full semicircle centred on the first slot. A larger radius gives a
 flatter end whose corners with the long sides are rounded to ``corner_r``. Each slot is ``slot_w`` wide
 (M6 clearance plus a print allowance) and ``slot_l`` long overall along
 the bar, with round ends; the slots repeat on a ``pitch`` along the bar's
-centreline, leaving ``pitch - slot_l`` of material between them, and the
-row is centred along the length so the end slots sit at least
-``end_margin`` from the ends. ``slots`` fixes the count instead when it is
-positive. ``slot_l`` equal to ``slot_w`` gives plain round holes.
+centreline, leaving ``pitch - slot_l`` of material between them. With
+capped ends the end slots are centred on the arc centres, ``end_r`` in
+from each tip, so the length must be ``2 * end_r`` plus a whole number of
+pitches; with square ends the row is centred along the length so the end
+slots sit at least ``end_margin`` from the ends. ``slots`` fixes the count
+instead when it is positive. ``slot_l`` equal to ``slot_w`` gives plain
+round holes.
 
 The bar lies in the XY plane centred on the origin, its length along X and
 its width along Y, and is extruded ``thickness`` up Z. Print it flat, as
@@ -67,9 +70,10 @@ class BarParams:
     # Centre-to-centre distance between neighbouring slots. pitch - slot_l
     # is the material left between them.
     pitch: float = 40.0
-    # Least distance from either end of the bar to the nearest slot's
-    # centre. The row is centred along the bar, so the actual margin is this
-    # or more.
+    # Square ends only (end_r = 0): least distance from either end of the
+    # bar to the nearest slot's centre. The row is centred along the bar, so
+    # the actual margin is this or more. With capped ends the end slots sit
+    # on the arc centres, end_r in from the tips, instead.
     end_margin: float = 20.0
     # Number of slots. 0 = as many as fit at the pitch inside the margins.
     slots: int = 0
@@ -89,18 +93,28 @@ class BarParams:
 
     # ----- derived -----
     @property
+    def margin(self) -> float:
+        """Distance from each tip to the end slot's centre: the arc centre
+        with capped ends, else the least margin asked for."""
+        return self.end_r if self.end_r > 0 else self.end_margin
+
+    @property
     def n_slots(self) -> int:
         if self.slots > 0:
             return self.slots
-        span = self.length - 2 * self.end_margin
+        span = self.length - 2 * self.margin
         if span < 0:
             return 0
         return int(math.floor(span / self.pitch + 1e-9)) + 1
 
     @property
     def slot_xs(self) -> list[float]:
-        """Slot centres along X, centred on the bar."""
+        """Slot centres along X. With capped ends the end slots sit on the
+        arc centres; otherwise the row is centred on the bar."""
         n = self.n_slots
+        if self.end_r > 0 and n > 1:
+            half = self.length / 2 - self.end_r
+            return [-half + i * (2 * half) / (n - 1) for i in range(n)]
         return [(i - (n - 1) / 2) * self.pitch for i in range(n)]
 
     @property
@@ -143,10 +157,24 @@ class BarParams:
             raise ValueError("length must be at least 2 * end_r, or the end arcs cross")
         if self.n_slots < 1:
             raise ValueError("no slot fits: length must be at least 2 * end_margin")
+        if self.end_r > 0:
+            # the end slots sit on the arc centres, so the span between them
+            # must be a whole number of pitches (zero for a single slot)
+            span = self.length - 2 * self.end_r
+            want = (self.n_slots - 1) * self.pitch
+            if abs(span - want) > 1e-6:
+                k = math.floor(span / self.pitch + 1e-9)
+                lo, hi = 2 * self.end_r + k * self.pitch, 2 * self.end_r + (k + 1) * self.pitch
+                raise ValueError(
+                    "with capped ends the end slots sit on the arc centres, so length must be "
+                    f"2 * end_r + k * pitch: got {self.length}, nearest are {lo:g} and {hi:g}"
+                )
         xs = self.slot_xs
         if xs[-1] + self.slot_l / 2 >= self.length / 2:
             raise ValueError("the end slots break out of the bar's ends")
-        if self.corner_r < 0 or 2 * self.corner_r > min(self.length - 2 * self.end_sagitta, self.width):
+        if self.corner_r < 0:
+            raise ValueError("corner_r must not be negative")
+        if not self.end_is_semicircle and 2 * self.corner_r > min(self.length - 2 * self.end_sagitta, self.width):
             raise ValueError("corner_r must fit within the bar")
         if self.label and self.label_depth >= self.thickness:
             raise ValueError("label_depth must be less than thickness")
@@ -160,17 +188,8 @@ class BarParams:
             f"ligament {self.ligament:.1f} between slots, {self.edge_ligament:.1f} to the edge"
         )
         if self.end_r > 0:
-            where = "in a slot" if self.pivot_in_slot else "between slots, so no bolt can sit there"
-            text += f"; ends capped R{self.end_r}, pivot {self.end_r} from each tip is {where}"
+            text += f"; ends capped R{self.end_r} with the end slots centred on the arcs"
         return text
-
-    @property
-    def pivot_in_slot(self) -> bool:
-        """Whether a bolt can be centred end_r in from the tip, i.e. whether
-        some slot's straight run covers that point."""
-        x = self.length / 2 - self.end_r
-        reach = (self.slot_l - self.slot_w) / 2
-        return any(abs(x - c) <= reach + 1e-9 for c in self.slot_xs)
 
 
 def outline(p: BarParams) -> Sketch:
@@ -179,15 +198,11 @@ def outline(p: BarParams) -> Sketch:
     if p.end_r <= 0:
         return Sketch(list(RectangleRounded(p.length, p.width, p.corner_r).faces()))
     xc, yc, xt = p.length / 2 - p.end_sagitta, p.width / 2, p.length / 2  # corner and tip
-    face = make_face(
-        [
-            Line((-xc, -yc), (xc, -yc)),
-            ThreePointArc((xc, -yc), (xt, 0), (xc, yc)),
-            Line((xc, yc), (-xc, yc)),
-            ThreePointArc((-xc, yc), (-xt, 0), (-xc, -yc)),
-        ]
-    )
-    face = face.face()
+    arcs = [ThreePointArc((xc, -yc), (xt, 0), (xc, yc)), ThreePointArc((-xc, yc), (-xt, 0), (-xc, -yc))]
+    if xc < 1e-9:  # the two arcs meet: no straight sides (a circle, for a semicircular cap)
+        face = make_face(arcs).face()
+    else:
+        face = make_face([Line((-xc, -yc), (xc, -yc)), arcs[0], Line((xc, yc), (-xc, yc)), arcs[1]]).face()
     if p.corner_r > 0 and not p.end_is_semicircle:  # a semicircle is already tangent to the sides
         face = face.fillet_2d(p.corner_r, face.vertices())
     return Sketch([face])

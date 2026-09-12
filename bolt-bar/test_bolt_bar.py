@@ -16,14 +16,17 @@ from conftest import assert_printable
 TOL = 1e-3
 
 
-@pytest.mark.parametrize("length,pitch,end_margin,slots,expect_n", [
-    (200.0, 40.0, 20.0, 0, 5),   # default: 20-60-100-140-180
-    (200.0, 40.0, 30.0, 0, 4),   # 40-80-120-160: the end slots are centred on the pivots
-    (100.0, 40.0, 20.0, 0, 2),   # 60 mm span fits two at 40 (20 and 60), centred at 30 and 70
-    (80.0, 40.0, 40.0, 0, 1),    # one slot, in the middle; R40 end arcs centred there too
-    (120.0, 35.0, 10.0, 3, 3),   # fixed count
+@pytest.mark.parametrize("length,pitch,end_margin,slots,end_r,expect_n", [
+    (200.0, 40.0, 20.0, 0, 20.0, 5),   # default: 20-60-100-140-180, end slots on the R20 arc centres
+    (200.0, 40.0, 20.0, 0, 40.0, 4),   # R40: 40-80-120-160
+    (80.0, 40.0, 20.0, 0, 20.0, 2),    # R20: 20 and 60
+    (40.0, 40.0, 20.0, 0, 20.0, 1),    # one slot on both arc centres at once
+    (110.0, 35.0, 10.0, 3, 20.0, 3),   # fixed count: 20-55-90
+    (200.0, 40.0, 20.0, 0, 0.0, 5),    # square ends: row centred, 20-60-100-140-180
+    (200.0, 40.0, 30.0, 0, 0.0, 4),    # square ends: 40-80-120-160
+    (100.0, 40.0, 20.0, 0, 0.0, 2),    # 60 mm span fits two at 40 (20 and 60), centred at 30 and 70
+    (120.0, 35.0, 10.0, 3, 0.0, 3),    # fixed count, square
 ])
-@pytest.mark.parametrize("end_r", [20.0, 40.0, 0.0])
 @pytest.mark.parametrize("slot_w,slot_l,width,thickness", [
     (6.6, 30.0, 40.0, 4.0),
     (6.4, 20.0, 40.0, 4.0),
@@ -49,7 +52,11 @@ def test_fit(length, pitch, end_margin, slots, expect_n, end_r, slot_w, slot_l, 
     assert len(xs) == expect_n
     assert all(b - a == pytest.approx(pitch) for a, b in zip(xs, xs[1:]))
     assert sum(xs) == pytest.approx(0, abs=1e-9)
-    assert length / 2 - xs[-1] >= end_margin - 1e-9
+    if end_r > 0:
+        # the last slot is centred exactly on the end arc's centre
+        assert length / 2 - xs[-1] == pytest.approx(end_r, abs=1e-9)
+    else:
+        assert length / 2 - xs[-1] >= end_margin - 1e-9
     plan = profile(p)
     assert len(plan.faces()) == 1
     inner = [w for w in plan.wires() if not w.is_same(plan.faces()[0].outer_wire())]
@@ -121,7 +128,7 @@ def test_rejects_no_slot_fitting():
 
 def test_rejects_end_slot_breaking_out():
     with pytest.raises(ValueError, match="break out"):
-        profile(BarParams(length=100.0, pitch=40.0, slots=3))
+        profile(BarParams(length=100.0, pitch=40.0, slots=3, end_r=0.0))
 
 
 def test_rejects_end_arc_narrower_than_bar():
@@ -134,18 +141,18 @@ def test_rejects_end_arcs_crossing():
         profile(BarParams(length=60.0, end_margin=10.0, end_r=40.0))
 
 
-def test_semicircle_end_matches_slot_pitch():
-    # at the defaults the tip is a semicircle whose centre is the first slot's centre
-    p = BarParams()
-    assert p.end_is_semicircle
-    assert p.length / 2 - p.end_r == pytest.approx(p.slot_xs[-1])
+def test_default_end_is_semicircle():
+    assert BarParams().end_is_semicircle
 
 
-def test_pivot_in_slot():
-    assert BarParams().pivot_in_slot                           # R20: the pivot is the first slot's centre
-    assert not BarParams(end_r=40.0).pivot_in_slot             # slots 5-35 and 45-75 from the tip: 40 is the bridge
-    assert BarParams(end_r=40.0, end_margin=30.0).pivot_in_slot  # 4 slots, the end ones centred 40 from the tip
-    assert BarParams(length=80.0, end_margin=40.0, end_r=40.0).pivot_in_slot
+def test_rejects_length_off_the_pitch():
+    with pytest.raises(ValueError, match="nearest are 200 and 240"):
+        profile(BarParams(length=210.0))
+
+
+def test_rejects_fixed_count_off_the_pitch():
+    with pytest.raises(ValueError, match="nearest are 200 and 240"):
+        profile(BarParams(length=200.0, slots=4))
 
 
 def test_rejects_non_positive_section():
@@ -155,7 +162,7 @@ def test_rejects_non_positive_section():
 
 def test_rejects_corner_too_big():
     with pytest.raises(ValueError, match="corner_r"):
-        profile(BarParams(corner_r=25.0))
+        profile(BarParams(corner_r=25.0, end_r=0.0))
 
 
 def test_rejects_label_through_bar():
