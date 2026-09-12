@@ -1,19 +1,22 @@
-"""Flat bar with a row of M6 clearance holes down its middle, to sit on top
-of a 40 mm aluminium extrusion rail and be bolted into its T-slot.
+"""Flat bar with a row of slots for M6 bolts down its middle, to sit on top
+of a 40 mm aluminium extrusion rail and be bolted into its T-slot anywhere
+along each slot.
 
 The bar is ``width`` x ``thickness`` in section and ``length`` long, with
-its plan corners rounded to ``corner_r``. The holes are ``hole_d`` in
-diameter (M6 clearance plus a print allowance), on a ``pitch`` along the
-bar's centreline, and the row is centred along the length so the end holes
-sit at least ``end_margin`` from the ends. ``holes`` fixes the count
-instead when it is positive.
+its plan corners rounded to ``corner_r``. Each slot is ``slot_w`` wide
+(M6 clearance plus a print allowance) and ``slot_l`` long overall along
+the bar, with round ends; the slots repeat on a ``pitch`` along the bar's
+centreline, leaving ``pitch - slot_l`` of material between them, and the
+row is centred along the length so the end slots sit at least
+``end_margin`` from the ends. ``slots`` fixes the count instead when it is
+positive. ``slot_l`` equal to ``slot_w`` gives plain round holes.
 
 The bar lies in the XY plane centred on the origin, its length along X and
 its width along Y, and is extruded ``thickness`` up Z. Print it flat, as
-drawn: the holes run along the print's Z, so nothing overhangs.
+drawn: the slots run along the print's Z, so nothing overhangs.
 
 Usage:
-    python bolt_bar.py -o bar.stl [--length 200] [--pitch 40] [--hole_d 6.6] ...
+    python bolt_bar.py -o bar.stl [--length 200] [--pitch 40] [--slot_l 30] ...
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from build123d import (
     Plane,
     RectangleRounded,
     Sketch,
+    SlotOverall,
     Text,
     export_stl,
     extrude,
@@ -46,77 +50,83 @@ class BarParams:
     # Across the rail: the same as the 40 mm extrusion it sits on.
     width: float = 40.0
     thickness: float = 4.0
-    # Hole diameter. M6 clearance is 6.4 (ISO 273 fine); 0.2 more lets a
-    # printed hole, which comes out small, pass the bolt.
-    hole_d: float = 6.6
-    # Centre-to-centre distance between neighbouring holes.
+    # Slot width, across the bar. M6 clearance is 6.4 (ISO 273 fine); 0.2
+    # more lets a printed slot, which comes out narrow, pass the bolt.
+    slot_w: float = 6.6
+    # Slot length along the bar, overall (round end to round end). Equal to
+    # slot_w gives a round hole.
+    slot_l: float = 30.0
+    # Centre-to-centre distance between neighbouring slots. pitch - slot_l
+    # is the material left between them.
     pitch: float = 40.0
-    # Least distance from either end of the bar to the nearest hole's
+    # Least distance from either end of the bar to the nearest slot's
     # centre. The row is centred along the bar, so the actual margin is this
     # or more.
     end_margin: float = 20.0
-    # Number of holes. 0 = as many as fit at the pitch inside the margins.
-    holes: int = 0
+    # Number of slots. 0 = as many as fit at the pitch inside the margins.
+    slots: int = 0
     # Radius on the bar's four plan corners.
     corner_r: float = 3.0
-    # ID engraved into the top face, reading along the bar, between the
-    # first two holes (or centred when there is one hole). Empty disables.
+    # ID engraved into the top face, reading along the bar, in the strip
+    # of material beside the slot row. Empty disables.
     label: str = ""
     label_depth: float = 0.4
     label_size: float = 3.0
 
     # ----- derived -----
     @property
-    def n_holes(self) -> int:
-        if self.holes > 0:
-            return self.holes
+    def n_slots(self) -> int:
+        if self.slots > 0:
+            return self.slots
         span = self.length - 2 * self.end_margin
         if span < 0:
             return 0
         return int(math.floor(span / self.pitch + 1e-9)) + 1
 
     @property
-    def hole_xs(self) -> list[float]:
-        """Hole centres along X, centred on the bar."""
-        n = self.n_holes
+    def slot_xs(self) -> list[float]:
+        """Slot centres along X, centred on the bar."""
+        n = self.n_slots
         return [(i - (n - 1) / 2) * self.pitch for i in range(n)]
 
     @property
     def ligament(self) -> float:
-        """Solid material between two neighbouring holes."""
-        return self.pitch - self.hole_d
+        """Solid material between two neighbouring slots."""
+        return self.pitch - self.slot_l
 
     @property
     def edge_ligament(self) -> float:
-        """Solid material between a hole and the bar's long edge."""
-        return (self.width - self.hole_d) / 2
+        """Solid material between a slot and the bar's long edge."""
+        return (self.width - self.slot_w) / 2
 
     def validate(self) -> None:
         if self.length <= 0 or self.width <= 0 or self.thickness <= 0:
             raise ValueError("length, width and thickness must be positive")
-        if self.hole_d <= 0:
-            raise ValueError("hole_d must be positive")
-        if self.pitch <= self.hole_d:
-            raise ValueError("pitch must exceed hole_d, or the holes merge")
-        if self.hole_d >= self.width:
-            raise ValueError("hole_d must be less than width")
-        if self.n_holes < 1:
-            raise ValueError("no hole fits: length must be at least 2 * end_margin")
-        xs = self.hole_xs
-        if xs[-1] + self.hole_d / 2 >= self.length / 2:
-            raise ValueError("the end holes break out of the bar's ends")
+        if self.slot_w <= 0:
+            raise ValueError("slot_w must be positive")
+        if self.slot_l < self.slot_w:
+            raise ValueError("slot_l must be at least slot_w")
+        if self.pitch <= self.slot_l:
+            raise ValueError("pitch must exceed slot_l, or the slots merge")
+        if self.slot_w >= self.width:
+            raise ValueError("slot_w must be less than width")
+        if self.n_slots < 1:
+            raise ValueError("no slot fits: length must be at least 2 * end_margin")
+        xs = self.slot_xs
+        if xs[-1] + self.slot_l / 2 >= self.length / 2:
+            raise ValueError("the end slots break out of the bar's ends")
         if self.corner_r < 0 or 2 * self.corner_r > min(self.length, self.width):
             raise ValueError("corner_r must fit within the bar")
         if self.label and self.label_depth >= self.thickness:
             raise ValueError("label_depth must be less than thickness")
 
     def report(self) -> str:
-        xs = self.hole_xs
+        xs = self.slot_xs
         return (
             f"{self.width} x {self.thickness} x {self.length} bar, "
-            f"{self.n_holes} holes d{self.hole_d} at {self.pitch} pitch, "
+            f"{self.n_slots} slots {self.slot_w} x {self.slot_l} at {self.pitch} pitch, "
             f"end margin {self.length / 2 - xs[-1]:.1f}, "
-            f"ligament {self.ligament:.1f} between holes, {self.edge_ligament:.1f} to the edge"
+            f"ligament {self.ligament:.1f} between slots, {self.edge_ligament:.1f} to the edge"
         )
 
 
@@ -125,23 +135,29 @@ def outline(p: BarParams) -> Sketch:
     return Sketch(list(RectangleRounded(p.length, p.width, p.corner_r).faces()))
 
 
-def holes(p: BarParams) -> Sketch:
-    return Sketch([Circle(p.hole_d / 2).moved(Location((x, 0))).face() for x in p.hole_xs])
+def _slot(p: BarParams):
+    if p.slot_l <= p.slot_w:  # a round hole; SlotOverall refuses a zero-length slot
+        return Circle(p.slot_w / 2)
+    return SlotOverall(p.slot_l, p.slot_w)
+
+
+def slots(p: BarParams) -> Sketch:
+    return Sketch([_slot(p).moved(Location((x, 0))).face() for x in p.slot_xs])
 
 
 def profile(p: BarParams) -> Sketch:
-    """The bar's plan with the holes cut."""
+    """The bar's plan with the slots cut."""
     p.validate()
-    return Sketch(list((outline(p) - holes(p)).faces()))
+    return Sketch(list((outline(p) - slots(p)).faces()))
 
 
 def _label_cut(p: BarParams) -> Part | None:
     if not p.label:
         return None
-    xs = p.hole_xs
-    x_mid = (xs[0] + xs[1]) / 2 if len(xs) > 1 else 0.0
-    size = min(p.label_size, p.width / 4)
-    plane = Plane(origin=(x_mid, 0, p.thickness), x_dir=(1, 0, 0), z_dir=(0, 0, 1))
+    # in the strip of material beside the slot row (+y side), reading along the bar
+    y_mid = (p.slot_w / 2 + p.width / 2) / 2
+    size = min(p.label_size, p.edge_ligament - 1.0)
+    plane = Plane(origin=(0, y_mid, p.thickness), x_dir=(1, 0, 0), z_dir=(0, 0, 1))
     text = plane * Text(p.label, font_size=size, font_style=FontStyle.BOLD)
     return extrude(text, amount=-p.label_depth)
 
