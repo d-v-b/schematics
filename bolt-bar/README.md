@@ -1,6 +1,6 @@
 # Bolt bar
 
-A flat 40 x 4 mm bar with a row of slots for M6 bolts down its middle. It
+A flat 40 x 5 mm bar with a row of slots for M6 bolts down its middle. It
 sits on top of a 40 mm aluminium extrusion rail and bolts into the rail's
 T-slot with M6 countersunk screws and T-nuts; the slots let each screw sit
 anywhere along its 30 mm, and the countersink keeps the heads flush with
@@ -16,7 +16,7 @@ its end swinging out past the bar's own width.
 |---|---|---|
 | length | 200 mm | `--length` |
 | width | 40 mm | `--width` |
-| thickness | 4 mm | `--thickness` |
+| thickness | 5 mm | `--thickness` |
 | slot width | 6.6 mm (M6 clearance 6.4 + 0.2 print allowance) | `--slot_w` |
 | slot length | 30 mm overall, round ends | `--slot_l` |
 | slot pitch | 40 mm (so 10 mm of material between slots) | `--pitch` |
@@ -48,4 +48,4 @@ pixi run test
 Print it flat, as modelled, top face up: the slots run vertically and the
 countersinks face upward, so nothing overhangs. Use M6 flat-head
 (countersunk, 90°) screws; a cap or button head would stand proud of the
-4 mm bar.
+5 mm bar.

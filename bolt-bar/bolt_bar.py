@@ -62,7 +62,7 @@ class BarParams:
     length: float = 200.0
     # Across the rail: the same as the 40 mm extrusion it sits on.
     width: float = 40.0
-    thickness: float = 4.0
+    thickness: float = 5.0
     # Slot width, across the bar. M6 clearance is 6.4 (ISO 273 fine); 0.2
     # more lets a printed slot, which comes out narrow, pass the bolt.
     slot_w: float = 6.6

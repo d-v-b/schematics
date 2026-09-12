@@ -202,4 +202,4 @@ def test_rejects_corner_too_big():
 
 def test_rejects_label_through_bar():
     with pytest.raises(ValueError, match="label_depth"):
-        profile(BarParams(label="x", label_depth=4.0))
+        profile(BarParams(label="x", label_depth=5.0))
