@@ -1,0 +1,36 @@
+# Dev actions for the bolt bar: a flat bar with M6 holes that sits on a 40 mm
+# aluminium rail. Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+length := "200"     # along the rail, mm
+pitch := "40"       # hole centre to centre, mm
+hole_d := "6.6"     # M6 clearance 6.4 + 0.2 print allowance
+args := "--length " + length + " --pitch " + pitch + " --hole_d " + hole_d
+
+default:
+    @just --list
+
+# Render the bar (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --length 120`
+[positional-arguments]
+render outfile *args:
+    {{python}} bolt_bar.py -o "$@"
+
+# Render the bar with the values above
+bar:
+    just render "{{out}}/bolt_bar_L{{length}}_p{{pitch}}_d{{hole_d}}.stl" {{args}}
+
+# Regenerate the drawing used by the README
+preview:
+    just render profile.svg {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
