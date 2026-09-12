@@ -10,7 +10,7 @@ length := "200"     # along the rail, mm
 pitch := "40"       # slot centre to centre, mm
 slot_l := "30"      # slot length along the bar, mm; pitch - slot_l is left between slots
 slot_w := "6.6"     # M6 clearance 6.4 + 0.2 print allowance
-end_r := "40"       # radius of the arc capping each end, centred that far in from the tip; 0 = square
+end_r := "20"       # radius of the arc capping each end, centred that far in from the tip; 20 = semicircle, 0 = square
 args := "--length " + length + " --pitch " + pitch + " --slot_l " + slot_l + " --slot_w " + slot_w + " --end_r " + end_r
 
 default:

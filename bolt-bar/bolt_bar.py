@@ -6,8 +6,9 @@ The bar is ``width`` x ``thickness`` in section and ``length`` long. Each
 end is capped by a circular arc of radius ``end_r`` centred on the bar's
 centreline ``end_r`` in from the tip, so a bar pivoting on a bolt at that
 point sweeps nothing beyond a circle of that radius and can turn on the
-rail without the end protruding. The corners where the arcs meet the long
-sides are rounded to ``corner_r``. Each slot is ``slot_w`` wide
+rail without the end protruding. At the default, half the width, each end
+is a full semicircle centred on the first slot. A larger radius gives a
+flatter end whose corners with the long sides are rounded to ``corner_r``. Each slot is ``slot_w`` wide
 (M6 clearance plus a print allowance) and ``slot_l`` long overall along
 the bar, with round ends; the slots repeat on a ``pitch`` along the bar's
 centreline, leaving ``pitch - slot_l`` of material between them, and the
@@ -75,8 +76,9 @@ class BarParams:
     # Radius of the arc capping each end, centred on the centreline this far
     # in from the tip: a bolt there is the pivot the bar can turn on without
     # the end reaching past this radius. 0 = square ends. Must be at least
-    # half the width so the arc spans the bar.
-    end_r: float = 40.0
+    # half the width so the arc spans the bar; exactly half (the default)
+    # makes each end a full semicircle, centred on the first slot.
+    end_r: float = 20.0
     # Radius on the four plan corners where the end arcs meet the sides.
     corner_r: float = 3.0
     # ID engraved into the top face, reading along the bar, in the strip
@@ -107,6 +109,12 @@ class BarParams:
         if self.end_r <= 0:
             return 0.0
         return self.end_r - math.sqrt(self.end_r**2 - (self.width / 2) ** 2)
+
+    @property
+    def end_is_semicircle(self) -> bool:
+        """end_r equals half the width: the arc meets the sides tangentially,
+        so there is no corner to round."""
+        return 0 < self.end_r <= self.width / 2 + 1e-9
 
     @property
     def ligament(self) -> float:
@@ -180,7 +188,7 @@ def outline(p: BarParams) -> Sketch:
         ]
     )
     face = face.face()
-    if p.corner_r > 0:
+    if p.corner_r > 0 and not p.end_is_semicircle:  # a semicircle is already tangent to the sides
         face = face.fillet_2d(p.corner_r, face.vertices())
     return Sketch([face])
 
