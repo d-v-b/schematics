@@ -1,0 +1,36 @@
+# Dev actions for the spacer: a flat disk that sits between an acrylic sheet
+# and a rafter, with the fixing screw through its bore. Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+outer_r := "20"     # disk radius, mm
+hole_d := "6"       # bore diameter, mm: the hole drilled for the screw
+thickness := "3"    # the standoff it sets, mm
+args := "--outer_r " + outer_r + " --hole_d " + hole_d + " --thickness " + thickness
+
+default:
+    @just --list
+
+# Render the spacer (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --thickness 6`
+[positional-arguments]
+render outfile *args:
+    {{python}} spacer.py -o "$@"
+
+# Render the spacer with the values above
+spacer:
+    just render "{{out}}/spacer_R{{outer_r}}_d{{hole_d}}_t{{thickness}}.stl" {{args}}
+
+# Regenerate the drawing used by the README
+preview:
+    just render profile.svg {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
