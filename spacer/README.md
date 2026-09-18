@@ -1,4 +1,4 @@
-# Spacer
+# Spacers
 
 A star-shaped band that sits between an acrylic sheet and the rafter it is
 screwed to, with the fixing screw passing through the aperture in its middle.
@@ -41,11 +41,32 @@ about while you position the sheet. Widening `--waist` opens the aperture up
 self-centring. `validate()` refuses anything that puts the aperture under
 `--min_aperture`, including a band fat enough to close the middle entirely.
 
+## Strip
+
+![strip profile](strip_profile.svg)
+
+For where the star is too wide: a 40 x 18 mm stadium, 3 mm thick, with a
+6 mm hole through its centre. That puts 9 mm between the hole's centre and
+each long edge, and the ends are full R9 semicircles.
+
+Fit it with the narrow dimension running down the slope. Water then has
+only 9 mm to run before it is off the edge, and the rounded ends leave no
+corner for a droplet to cling to.
+
+| | default | flag |
+|---|---|---|
+| length | 40 mm, across the slope | `--length` |
+| half width | 9 mm, hole centre to the long edges and radius of the ends | `--half_width` |
+| hole | 6 mm, the hole drilled for the screw | `--hole_d` |
+| thickness | 3 mm (the standoff it sets) | `--thickness` |
+
 ## Use
 
 ```
 pixi run spacer                                # stl/spacer_R20_b3_w0.382_p5_t3.stl
 pixi run render out.stl --points 6 --thickness 6
+pixi run strip                                 # stl/strip_L40_w9_d6_t3.stl
+pixi run render-strip out.stl --length 60
 pixi run test
 ```
 

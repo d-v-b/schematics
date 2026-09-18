@@ -1,6 +1,6 @@
-# Dev actions for the spacer: a star-shaped band that sits between an acrylic
-# sheet and a rafter, with the fixing screw through the aperture in its
-# middle. Run `just` to list them.
+# Dev actions for the spacers that sit between an acrylic sheet and a rafter:
+# a star-shaped band, and a narrow strip for where the star is too wide.
+# Run `just` to list them.
 #
 # Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
 
@@ -14,6 +14,12 @@ points := "5"         # points on the star
 thickness := "3"      # the standoff it sets, mm
 args := "--outer_r " + outer_r + " --band_r " + band_r + " --waist " + waist + " --points " + points + " --thickness " + thickness
 
+# the narrow strip, for where the star is too wide
+strip_length := "40"      # across the slope, mm
+strip_half_w := "9"       # hole centre to the long edges, down the slope, mm
+strip_hole := "6"         # the hole drilled for the screw, mm
+strip_args := "--length " + strip_length + " --half_width " + strip_half_w + " --hole_d " + strip_hole + " --thickness " + thickness
+
 default:
     @just --list
 
@@ -26,9 +32,19 @@ render outfile *args:
 spacer:
     just render "{{out}}/spacer_R{{outer_r}}_b{{band_r}}_w{{waist}}_p{{points}}_t{{thickness}}.stl" {{args}}
 
-# Regenerate the drawing used by the README
+# Render the strip (.stl, .step or .svg) with any --param overrides, e.g. `just render-strip out.stl --length 60`
+[positional-arguments]
+render-strip outfile *args:
+    {{python}} strip.py -o "$@"
+
+# Render the strip with the values above
+strip:
+    just render-strip "{{out}}/strip_L{{strip_length}}_w{{strip_half_w}}_d{{strip_hole}}_t{{thickness}}.stl" {{strip_args}}
+
+# Regenerate the drawings used by the README
 preview:
     just render profile.svg {{args}}
+    just render-strip strip_profile.svg {{strip_args}}
 
 # Run the geometry tests
 test:
