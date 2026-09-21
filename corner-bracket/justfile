@@ -1,0 +1,41 @@
+# Dev actions for the corner bracket: a right-angle bracket for two M8 bolts,
+# one through each leg, with a rib in the inside corner along one edge.
+# Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+leg := "40"          # each leg's reach from the other leg's outer face, mm
+thickness := "6"     # mm
+width := "30"        # along the corner: the print's height, mm
+rib_l := "25"        # the gusset's run along each leg from the inside corner, mm
+rib_t := "5"         # how much of the width the gusset fills, from one edge, mm
+hole_d := "8.6"      # M8 clearance 8.4 + 0.2 print allowance
+args := "--leg " + leg + " --thickness " + thickness + " --width " + width + " --rib_l " + rib_l + " --rib_t " + rib_t + " --hole_d " + hole_d
+
+default:
+    @just --list
+
+# Render the bracket (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --leg 50`
+[positional-arguments]
+render outfile *args:
+    {{python}} bracket.py -o "$@"
+
+# Render the bracket with the values above
+bracket:
+    just render "{{out}}/bracket_L{{leg}}_t{{thickness}}_w{{width}}_r{{rib_l}}x{{rib_t}}_d{{hole_d}}.stl" {{args}}
+
+# Regenerate the drawings used by the README
+preview:
+    just render profile.svg {{args}}
+    just render bracket.svg --iso {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
