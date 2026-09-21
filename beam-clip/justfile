@@ -1,0 +1,43 @@
+# Dev actions for the beam clip: a flat plate, flush on a beam's face, whose
+# strip of straight runs and circular arcs holds on by being stretched across it.
+# Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+beam_w := "40"      # the beam, across its top face, mm
+span := "38"        # relaxed gap between the lips; beam_w - span is the stretch
+loops := "3"
+loop_r := "3.25"    # centreline radius of every arc, mm
+turn := "125"       # how far each foot turns off the run, degrees; past 90 the loop pinches to a neck
+t := "1.6"          # strip width in the plane of the beam's face, mm
+lip := "4"          # how far each lip reaches down the beam's side, mm
+plate := "3"        # thickness off the beam's face; grip scales with it, stress does not
+args := "--beam_w " + beam_w + " --span " + span + " --loops " + loops + " --loop_r " + loop_r + " --turn " + turn + " --t " + t + " --lip " + lip + " --plate " + plate
+
+default:
+    @just --list
+
+# Render the clip (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --plate 4`
+[positional-arguments]
+render outfile *args:
+    {{python}} clip.py -o "$@"
+
+# Render the clip with the values above
+clip:
+    just render "{{out}}/clip_{{span}}on{{beam_w}}_n{{loops}}_r{{loop_r}}_a{{turn}}_t{{t}}_p{{plate}}.stl" {{args}}
+
+# Regenerate the drawings used by the README
+preview:
+    just render profile.svg {{args}}
+    just render clip.svg --iso {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
