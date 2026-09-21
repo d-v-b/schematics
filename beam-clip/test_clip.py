@@ -53,16 +53,33 @@ def test_fit(loops, loop_r, turn, t, plate):
     # (the band less its two half-disc end caps, which the lips swallow)
     assert sum(f.area for f in contact) == pytest.approx(band.area - math.pi * t**2 / 4, rel=1e-4)
 
-    # each lip's inside face is square to the span at +-span / 2, running
-    # the lips' full width along the beam and up to the foot of its lead-in
-    # chamfer, so the relaxed gap is span
+    # each lip's inside face is drafted: set back lip_relief at its root,
+    # where the beam's face meets the plate (z = plate), and leaning in to
+    # meet the beam at its tip, the foot of the lead-in chamfer. So the
+    # lips' innermost points, the only place they touch the beam, are the
+    # tips, span apart; the drafted faces run the lips' full width along
+    # the beam
+    top = plate + p.lip
+    tip_z = top - p.chamfer
     for side in (-1, 1):
-        inner = [f for f in body.faces()
-                 if abs(f.center().X - side * s) < TOL and abs(abs(f.normal_at().X) - 1) < 1e-6]
-        assert len(inner) == 1
-        fb = inner[0].bounding_box()
-        assert (fb.min.Y, fb.max.Y) == pytest.approx((-t / 2, h + t / 2), abs=TOL)
-        assert (fb.min.Z, fb.max.Z) == pytest.approx((0, plate + p.lip - p.chamfer), abs=TOL)
+        # above the plate there is nothing but the lips
+        lip_faces = [f for f in body.faces()
+                     if side * f.center().X > 0 and f.bounding_box().min.Z > plate - TOL]
+        above = [v for f in lip_faces for v in f.vertices() if v.Z > plate + TOL]
+        innermost = min(abs(v.X) for v in above)
+        assert innermost == pytest.approx(s, abs=TOL)
+        tips = [v.Z for v in above if abs(abs(v.X) - s) < TOL]
+        assert tips and all(z == pytest.approx(tip_z, abs=TOL) for z in tips)
+        drafted = [f for f in lip_faces
+                   if abs(f.normal_at().Y) < 1e-6 and 0.01 < abs(f.normal_at().Z) < 0.99
+                   and plate - TOL < f.bounding_box().min.Z and f.bounding_box().max.Z < tip_z + TOL]
+        assert len(drafted) == 1
+        db = drafted[0].bounding_box()
+        assert (db.min.Y, db.max.Y) == pytest.approx((-t / 2, h + t / 2), abs=TOL)
+        assert (db.min.Z, db.max.Z) == pytest.approx((plate, tip_z), abs=TOL)
+        assert (min(abs(db.min.X), abs(db.max.X)), max(abs(db.min.X), abs(db.max.X))) == pytest.approx(
+            (s, s + p.lip_relief), abs=TOL)
+    assert p.lip_draft == pytest.approx(math.degrees(math.atan2(p.lip_relief, p.lip - p.chamfer)))
     assert p.interference == pytest.approx(p.beam_w - p.span)
 
     # the centreline is flats and three tangent arcs of loop_r per loop, and
@@ -143,6 +160,11 @@ def test_rejects_over_creep_ceiling():
 def test_rejects_chamfer_short_of_interference():
     with pytest.raises(ValueError, match="lead-in"):
         profile(ClipParams(chamfer=0.5))
+
+
+def test_rejects_relief_through_lip_root():
+    with pytest.raises(ValueError, match="lip_relief must leave the lip at least t thick"):
+        profile(ClipParams(lip_relief=1.0))
 
 
 def test_rejects_chamfer_through_lip():

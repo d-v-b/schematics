@@ -17,7 +17,9 @@ Relaxed, the lips' inside faces are ``span`` apart, less than the beam's
 ``beam_w``. Pushing the clip onto the beam, the beam's edges ride the
 lead-in ``chamfer`` on each lip and spread the lips by the
 ``interference``; the loops take that stretch as bending in the plane of
-the face and pull the lips in against the beam's sides.
+the face and pull the lips in against the beam's sides. Each lip's inside
+face is drafted ``lip_relief`` back at its root, so it touches the beam only
+at its tip.
 
 The compliance model treats the strip as a thin curved beam loaded in
 tension along the runs' centreline. The bending moment at any point is the
@@ -37,7 +39,9 @@ its runs' centreline on y = 0 and its loops swinging towards +y, i.e. along
 the beam; the plate rises ``plate`` up Z, and the lips a further ``lip``
 above it. The beam's face rests on the plate's top at z = plate, with the
 beam's sides at x = +-beam_w / 2 once the clip is on. Every wall is
-vertical and the chamfers face up, so nothing overhangs.
+vertical but the lips' drafted inside faces, which lean in by lip_draft
+(about 10 degrees), and the chamfers face up, so nothing overhangs more than
+that.
 
 Usage:
     python clip.py -o clip.stl [--span 38] [--loops 3] [--loop_r 3.25] [--turn 125]
@@ -89,6 +93,11 @@ class ClipParams:
     lip: float = 4.0
     # The lips are wider than the strip so the loops, not the lips, flex.
     lip_t: float = 2.4
+    # Each lip's inside face is drafted: set back this far at its root, where
+    # the beam's face meets the plate, and leaning in to meet the beam only at
+    # its tip, the foot of the lead-in chamfer. Contact is then one definite
+    # line instead of a face that print tolerance makes touch anywhere.
+    lip_relief: float = 0.5
     # 45 degree lead-in on each lip's inside tip: the beam's edge rides
     # it to spread the lips as the clip is pushed on.
     chamfer: float = 1.2
@@ -130,6 +139,11 @@ class ClipParams:
         level with their centres. The gap between neighbouring crowns is
         this plus a flat, so it is never the tighter of the two."""
         return self.loop_w - 2 * self.loop_r - self.t
+
+    @property
+    def lip_draft(self) -> float:
+        """Angle of the lips' drafted inside faces from square, degrees."""
+        return math.degrees(math.atan2(self.lip_relief, self.lip - self.chamfer))
 
     @property
     def interference(self) -> float:
@@ -179,6 +193,10 @@ class ClipParams:
             raise ValueError("turn must be between 0 and 180 degrees, exclusive")
         if self.lip_t < self.t:
             raise ValueError("lip_t must be at least t, or the lips flex instead of the loops")
+        if self.lip_relief < 0:
+            raise ValueError("lip_relief must not be negative")
+        if self.lip_t - self.lip_relief < self.t:
+            raise ValueError("lip_relief must leave the lip at least t thick at its root")
         if self.flat < 0:
             raise ValueError(
                 f"the loops do not fit: {self.loops} of {self.loop_w:.1f} need more than the {self.span:g} span"
@@ -205,7 +223,7 @@ class ClipParams:
         return (
             f"{self.span:g} relaxed on a {self.beam_w:g} beam: {self.loops} loops R{self.loop_r:g} "
             f"turning {self.turn:g} deg, {self.t:g} strip, {self.loop_h + self.t:.1f} along the beam, "
-            f"{self.plate:g} plate + {self.lip:g} lips, neck {self.neck:.2f} clear, runs {self.flat:.2f}; "
+            f"{self.plate:g} plate + {self.lip:g} lips drafted {self.lip_draft:.0f} deg to meet the beam at their tips, neck {self.neck:.2f} clear, runs {self.flat:.2f}; "
             f"grip {self.grip:.1f} N, crown stress {self.crown_stress:.1f} MPa "
             f"of {self.creep_limit:g} creep ceiling"
         )
@@ -221,8 +239,10 @@ def centreline(p: ClipParams) -> Wire:
     down = -math.pi / 2
     edges = []
     x = -p.span / 2
-    for _ in range(p.loops):
-        edges.append(Line((x, y0), (x + p.flat, y0)))
+    for i in range(p.loops):
+        # the first run starts at the left lip's set-back root
+        start = x - p.lip_relief if i == 0 else x
+        edges.append(Line((start, y0), (x + p.flat, y0)))
         x += p.flat
         foot1 = (x, y0 + r)
         up = _pt(foot1, r, down + a)
@@ -234,7 +254,7 @@ def centreline(p: ClipParams) -> Wire:
         edges.append(ThreePointArc(up, top, over))
         edges.append(ThreePointArc(over, _pt(foot2, r, down - a / 2), (x + p.loop_w, y0)))
         x += p.loop_w
-    edges.append(Line((x, y0), (p.span / 2, y0)))
+    edges.append(Line((x, y0), (p.span / 2 + p.lip_relief, y0)))
     return Wire(edges)
 
 
@@ -246,12 +266,14 @@ def strip(p: ClipParams) -> Face:
 
 def lips(p: ClipParams) -> Part:
     """A block at each end, as wide along the beam as the serpentine, rising
-    lip above the plate to reach down the beam's side, its inside top edge
-    chamfered as a lead-in."""
-    s, lt, c, top = p.span / 2, p.lip_t, p.chamfer, p.plate + p.lip
+    lip above the plate to reach down the beam's side. Its inside face is
+    set back lip_relief at the root and leans in to the tip, where it meets
+    the beam at the foot of the lead-in chamfer."""
+    s, lt, c, top, r = p.span / 2, p.lip_t, p.chamfer, p.plate + p.lip, p.lip_relief
     y0, y1 = -p.t / 2, p.loop_h + p.t / 2
-    # in the XZ plane: the right lip's section, its inside top corner cut
-    right = [(s + lt, 0), (s + lt, top), (s + c, top), (s, top - c), (s, 0)]
+    # in the XZ plane: the right lip's section, drafted from its root at the
+    # plate's top to its tip, then chamfered
+    right = [(s + lt, 0), (s + lt, top), (s + c, top), (s, top - c), (s + r, p.plate), (s + r, 0)]
     # mirrored in x, and reversed so both wind the same way
     left = [(-x, z) for x, z in reversed(right)]
     blocks = []

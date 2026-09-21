@@ -23,6 +23,12 @@ edges ride the lead-in chamfer on each lip and spread the lips 2 mm. The
 loops take that stretch as bending in the plane of the face and pull the
 lips in against the beam's sides.
 
+Each lip's inside face is drafted: set back 0.5 mm at its root, where the
+plate meets the beam, and leaning in about 10° to touch the beam only at
+its tip, just above the lead-in chamfer. Contact is then one definite line
+at the far end of the lip. A square face would touch wherever print
+tolerance happened to leave it proud.
+
 ![clip](clip.svg)
 
 As printed, the beam's face rests on top of the serpentine, between the
@@ -84,6 +90,7 @@ a thinner 1.2× margin, with the neck still 2.15 mm clear.
 | strip | 1.6 mm wide in the face's plane | `--t` |
 | loops | 3, R3.25, feet turning 125° | `--loops`, `--loop_r`, `--turn` |
 | lips | 4 mm down the side, 2.4 mm thick, as wide along the beam as the loops | `--lip`, `--lip_t` |
+| lip draft | inside face set back 0.5 mm at the root, about 10°, so the lips meet the beam at their tips | `--lip_relief` |
 | lead-in | 1.2 mm × 45° on each lip's inside edge | `--chamfer` |
 | least printable gap | 1.2 mm | `--min_gap` |
 | material | PETG: E 2000 MPa, creep ceiling 15 MPa | `--modulus`, `--creep_limit` |
@@ -107,7 +114,9 @@ pixi run test
 ```
 
 Print it as modelled: the serpentine flat on the bed, the lips rising from
-it. Every wall is vertical and the chamfers face up, so nothing overhangs.
+it. Every wall is vertical except the lips' drafted inside faces, which
+lean in about 10°, and the chamfers face up, so nothing overhangs
+meaningfully.
 The side that was on the bed faces away from the beam. Use PETG — the
 numbers above assume it, and PLA creeps at a lower stress. Print the strip
 solid with perimeters; at 1.6 mm wide there's no room for infill.
