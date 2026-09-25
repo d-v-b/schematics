@@ -16,6 +16,17 @@ from.
 This is the anchor set in the gap, looking along the beams. The walls, the
 trigger cords and the rubber bands are dashed.
 
+[`animation.html`](animation.html), written by `pixi run animate`, animates
+the whole cycle from the real part outlines and the mechanics model:
+
+1. trigger pulled
+2. pushed up into the gap
+3. set by the bands
+4. loaded, with the wall reactions and the dent in the wood shown
+5. released and taken out
+
+A slider sets the load.
+
 ## How it holds
 
 Each cam's working edge is a logarithmic spiral. Along a log spiral the

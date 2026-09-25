@@ -1,0 +1,388 @@
+<title>Cam Anchor in Motion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #eef1ef;
+  --panel: #f8faf9;
+  --ink: #1b2420;
+  --muted: #5d6b65;
+  --rule: #cfd8d4;
+  --wood: #c8a57a;
+  --wood-grain: #a9855a;
+  --petg: rgba(38, 132, 122, 0.55);
+  --petg-edge: #1d6b63;
+  --plate: rgba(38, 132, 122, 0.18);
+  --steel: #7d8a90;
+  --cord: #6a4fa3;
+  --band: #b8872a;
+  --force: #d0482a;
+  --load: #394a44;
+  --warn: #b3361c;
+  --focus: #1d6b63;
+  --font-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --font-label: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111715;
+    --panel: #18201d;
+    --ink: #dbe4e0;
+    --muted: #93a39c;
+    --rule: #2c3833;
+    --wood: #6b5236;
+    --wood-grain: #856848;
+    --petg: rgba(79, 179, 168, 0.5);
+    --petg-edge: #74d1c5;
+    --plate: rgba(79, 179, 168, 0.16);
+    --steel: #9aa7ad;
+    --cord: #b39ae6;
+    --band: #e0b04f;
+    --force: #f07a55;
+    --load: #b9c6c0;
+    --warn: #ff8a6a;
+    --focus: #74d1c5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111715;
+  --panel: #18201d;
+  --ink: #dbe4e0;
+  --muted: #93a39c;
+  --rule: #2c3833;
+  --wood: #6b5236;
+  --wood-grain: #856848;
+  --petg: rgba(79, 179, 168, 0.5);
+  --petg-edge: #74d1c5;
+  --plate: rgba(79, 179, 168, 0.16);
+  --steel: #9aa7ad;
+  --cord: #b39ae6;
+  --band: #e0b04f;
+  --force: #f07a55;
+  --load: #b9c6c0;
+  --warn: #ff8a6a;
+  --focus: #74d1c5;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  padding-inline: 16px;
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: grid; gap: 4px; }
+h1 {
+  font: 600 1.9rem/1.1 var(--font-label);
+  letter-spacing: 0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--muted); max-width: 68ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .main { grid-template-columns: 1fr; } }
+.stage {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+svg#scene { width: 100%; height: auto; display: block; max-height: 78vh; }
+.caption {
+  font: 500 1.05rem/1.3 var(--font-label);
+  letter-spacing: 0.02em;
+  min-height: 2.6em;
+  margin: 0 4px;
+}
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 0 4px; }
+.controls label { font: 500 0.8rem var(--font-label); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); display: flex; gap: 8px; align-items: center; flex: 1 1 200px; }
+.controls input[type="range"] { flex: 1; accent-color: var(--petg-edge); min-width: 0; }
+button {
+  font: 600 0.9rem var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--bg);
+  border: 0;
+  border-radius: 4px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+aside { display: grid; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; display: grid; gap: 8px; }
+.card h2 { font: 600 0.8rem var(--font-label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0; }
+ol.steps { margin: 0; padding-left: 1.4em; display: grid; gap: 3px; }
+ol.steps li { color: var(--muted); }
+ol.steps li.on { color: var(--ink); font-weight: 500; }
+ol.steps li.on::marker { color: var(--force); }
+dl.read { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+dl.read dt { color: var(--muted); }
+dl.read dd { margin: 0; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font: 600 0.72rem var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.chip.ok { color: var(--petg-edge); }
+.chip.bad { color: var(--warn); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+.note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Cam anchor in motion</h1>
+    <p class="lede">Four log-spiral cams on an <span id="boltname">M8</span> axle, looking along the beams into the <span class="num" id="gapname">80</span> mm gap. The rubber bands set the cams against the walls, and a hanging load turns them harder in. The outlines are the printed parts, and the forces come from the anchor's mechanics model.</p>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="Animated side view">
+      <svg id="scene" role="img" aria-label="The anchor between two beams"></svg>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="controls">
+        <button id="play" type="button">Pause</button>
+        <label for="scrub">Time <input id="scrub" type="range" min="0" max="1000" value="0"></label>
+        <label for="load">Load <input id="load" type="range" min="1" max="40" value="10"> <span class="num" id="loadval">10 kg</span></label>
+      </div>
+      <div class="legend">
+        <span><i style="border-color: var(--cord)"></i>trigger cord</span>
+        <span><i style="border-color: var(--band); border-top-style: dashed"></i>rubber band</span>
+        <span><i style="border-color: var(--force)"></i>wall reaction</span>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Cycle</h2>
+        <ol class="steps" id="steps">
+          <li>At rest: the bands hold the cams fully open</li>
+          <li>Pull the trigger to fold the cams in</li>
+          <li>Push the anchor up into the gap</li>
+          <li>Let go: the bands swing the cams to the walls</li>
+          <li>Hang the load: the cams bite and turn further out</li>
+          <li>Unload, pull the trigger, take it out</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Now</h2>
+        <dl class="read">
+          <dt>Cam turn from retracted</dt><dd id="r-rho">0°</dd>
+          <dt>Span across the cams</dt><dd id="r-span">0 mm</dd>
+          <dt>Load on the eye</dt><dd id="r-load">0 kg</dd>
+          <dt>Push into each wall, N</dt><dd id="r-n">0 N</dd>
+          <dt>Friction up each wall, F</dt><dd id="r-f">0 N</dd>
+          <dt>Friction needed, F / N</dt><dd id="r-mu">0.25</dd>
+          <dt>Wood dent under a cam</dt><dd id="r-dent">0 mm</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Rating</h2>
+        <p class="note" id="rating"></p>
+        <div id="ratingchip"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const G = /*GEOMETRY*/null;
+const NS = "http://www.w3.org/2000/svg";
+const deg = r => r * 180 / Math.PI;
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+// ---- scene layout, in mm; z up, flipped into SVG y below ----
+const BEAM_W = 53.6, BEAM_TOP = 150;
+const Z_SET = 58, Z_LOW = -62;
+const TOP = 118, BOTTOM = -196, HALF = G.gap / 2 + 36;
+const scene = document.getElementById("scene");
+scene.setAttribute("viewBox", `${-HALF} ${-TOP} ${2 * HALF} ${TOP - BOTTOM}`);
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+// wood grain for the rough-sawn beams
+const defs = el("defs", {}, scene);
+const pat = el("pattern", { id: "grain", width: 6, height: 40, patternUnits: "userSpaceOnUse" }, defs);
+el("rect", { width: 6, height: 40, fill: "var(--wood)" }, pat);
+el("path", { d: "M1.5 0 C2.5 12 0.5 24 1.8 40 M4.4 0 C3.6 15 5.2 26 4.2 40", stroke: "var(--wood-grain)", "stroke-width": 0.5, fill: "none" }, pat);
+const arrowHead = el("marker", { id: "ah", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" }, defs);
+el("path", { d: "M0 0 L10 5 L0 10 Z", fill: "var(--force)" }, arrowHead);
+const loadHead = el("marker", { id: "lh", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto" }, defs);
+el("path", { d: "M0 0 L10 5 L0 10 Z", fill: "var(--load)" }, loadHead);
+
+const world = el("g", { transform: "scale(1,-1)" }, scene);
+// ceiling line and beams
+for (const s of [-1, 1]) {
+  const x0 = s > 0 ? G.gap / 2 : -G.gap / 2 - BEAM_W;
+  el("rect", { x: x0, y: 0, width: BEAM_W, height: BEAM_TOP + 10, fill: "url(#grain)", stroke: "var(--wood-grain)", "stroke-width": 0.6 }, world);
+}
+const anchor = el("g", {}, world);
+
+// cams: +x is the part as drawn, -x its mirror
+const camR = el("path", { d: G.cam, fill: "var(--petg)", stroke: "var(--petg-edge)", "stroke-width": 0.5, "fill-rule": "evenodd" }, anchor);
+const camL = el("path", { d: G.cam, fill: "var(--petg)", stroke: "var(--petg-edge)", "stroke-width": 0.5, "fill-rule": "evenodd" }, anchor);
+const cordR = el("line", { stroke: "var(--cord)", "stroke-width": 0.7 }, anchor);
+const cordL = el("line", { stroke: "var(--cord)", "stroke-width": 0.7 }, anchor);
+const bandR = el("line", { stroke: "var(--band)", "stroke-width": 1.1, "stroke-dasharray": "2.4 1.4" }, anchor);
+const bandL = el("line", { stroke: "var(--band)", "stroke-width": 1.1, "stroke-dasharray": "2.4 1.4" }, anchor);
+// front plate over the stack, then the bolts and sleeve
+el("path", { d: G.plate, fill: "var(--plate)", stroke: "var(--petg-edge)", "stroke-width": 0.5, "fill-rule": "evenodd" }, anchor);
+const hex = r => Array.from({ length: 6 }, (_, i) => `${r * Math.cos(i * Math.PI / 3)},${r * Math.sin(i * Math.PI / 3)}`).join(" ");
+el("polygon", { points: hex(G.bolt * 0.87), fill: "var(--steel)" }, anchor);
+el("circle", { cx: 0, cy: -G.drop, r: G.sleeve_od / 2, fill: "var(--petg)", stroke: "var(--petg-edge)", "stroke-width": 0.5 }, anchor);
+el("polygon", { points: hex(G.bolt * 0.87), fill: "var(--steel)", transform: `translate(0,${-G.drop})` }, anchor);
+// finger-pull: bar and ring
+const pull = el("g", {}, anchor);
+el("rect", { x: -G.pull[0] - 5, y: -4, width: 2 * G.pull[0] + 10, height: 8, rx: 1.5, fill: "var(--panel)", stroke: "var(--ink)", "stroke-width": 0.6 }, pull);
+el("circle", { cx: 0, cy: -15, r: 11.75, fill: "none", stroke: "var(--ink)", "stroke-width": 4.5 }, pull);
+el("circle", { cx: 0, cy: -15, r: 11.75, fill: "none", stroke: "var(--panel)", "stroke-width": 3 }, pull);
+// hanging load: cord and a drying rod in section
+const loadG = el("g", {}, anchor);
+const loadCord = el("line", { x1: 0, y1: -G.drop - G.sleeve_od / 2, x2: 0, y2: -G.drop - 88, stroke: "var(--load)", "stroke-width": 0.8 }, loadG);
+el("circle", { cx: 0, cy: -G.drop - 100, r: 12, fill: "var(--load)" }, loadG);
+// forces, drawn in world coordinates (not with the anchor group)
+const forces = el("g", {}, world);
+const fN = [0, 1].map(() => el("line", { stroke: "var(--force)", "stroke-width": 1.4, "marker-end": "url(#ah)" }, forces));
+const fF = [0, 1].map(() => el("line", { stroke: "var(--force)", "stroke-width": 1.4, "marker-end": "url(#ah)" }, forces));
+const labels = el("g", {}, scene);
+const halo = { "paint-order": "stroke", stroke: "var(--panel)", "stroke-width": 2.2, "stroke-linejoin": "round" };
+const lblN = [0, 1].map(() => el("text", { "font-family": "IBM Plex Mono, monospace", "font-size": 6.5, "font-weight": 500, fill: "var(--force)", ...halo }, labels));
+const lblF = [0, 1].map(() => el("text", { "font-family": "IBM Plex Mono, monospace", "font-size": 6.5, "font-weight": 500, fill: "var(--force)", ...halo }, labels));
+const lblW = el("text", { "font-family": "IBM Plex Mono, monospace", "font-size": 7, fill: "var(--load)", "text-anchor": "start", ...halo }, labels);
+
+// ---- the cycle ----
+// each segment eases z (axle height), rho (cam turn) and load (0..1) between its ends
+const S = [
+  { d: 1.4, step: 0, z: [Z_LOW, Z_LOW], rho: [G.rho_rest, G.rho_rest], load: [0, 0], cap: "At rest below the beams: the bands hold the cams fully open, wider than the gap." },
+  { d: 1.3, step: 1, z: [Z_LOW, Z_LOW], rho: [G.rho_rest, 0], load: [0, 0], cap: "Pull the finger-pull: the cords fold the cams in to a 68 mm span." },
+  { d: 1.8, step: 2, z: [Z_LOW, Z_SET], rho: [0, 0], load: [0, 0], cap: "Push the anchor up into the gap between the beams." },
+  { d: 1.0, step: 3, z: [Z_SET, Z_SET], rho: [0, G.rho_gap], load: [0, 0], cap: "Let go: the bands swing the cams out until their teeth meet the walls.", e: easeOut },
+  { d: 0.8, step: 3, z: [Z_SET, Z_SET], rho: [G.rho_gap, G.rho_gap], load: [0, 0], cap: "Set. Each cam meets its wall at the cam angle, below the axle." },
+  { d: 2.0, step: 4, z: [Z_SET, Z_SET], rho: [G.rho_gap, G.rho_gap], load: [0, 1], cap: "Hang the load: the axle is pulled down, which turns the cams harder into the walls." },
+  { d: 2.4, step: 4, z: [Z_SET, Z_SET], rho: [G.rho_gap, G.rho_gap], load: [1, 1], cap: "Loaded. The wall's push runs through the axle, so the friction needed is only tan α of it." },
+  { d: 1.0, step: 5, z: [Z_SET, Z_SET], rho: [G.rho_gap, G.rho_gap], load: [1, 0], cap: "Take the load off." },
+  { d: 1.1, step: 5, z: [Z_SET, Z_SET], rho: [G.rho_gap, 0], load: [0, 0], cap: "Pull the trigger to free the cams from the walls." },
+  { d: 1.6, step: 5, z: [Z_SET, Z_LOW], rho: [0, 0], load: [0, 0], cap: "Lower the anchor out of the gap." },
+  { d: 1.0, step: 5, z: [Z_LOW, Z_LOW], rho: [0, G.rho_rest], load: [0, 0], cap: "Let go: the bands open the cams again.", e: easeOut },
+];
+let t0 = 0;
+for (const s of S) { s.t0 = t0; t0 += s.d; }
+const T = t0;
+
+let loadKg = 10;
+const k = G.k, g = 9.81;
+function indentAt(kg) {
+  const tab = G.indent, i = Math.min(Math.floor(kg), tab.length - 2), f = kg - i;
+  return { dent: lerp(tab[i].indent, tab[i + 1].indent, f), rho: lerp(tab[i].rho, tab[i + 1].rho, f) };
+}
+function state(t) {
+  const s = S.find(s => t < s.t0 + s.d) || S[S.length - 1];
+  const u = (s.e || ease)(Math.min(1, Math.max(0, (t - s.t0) / s.d)));
+  const load = lerp(s.load[0], s.load[1], u) * loadKg;
+  const ind = indentAt(load);
+  const rho = lerp(s.rho[0], s.rho[1], u) + (s.step === 4 || s.step === 5 ? ind.rho : 0);
+  return { s, z: lerp(s.z[0], s.z[1], u), rho, load, dent: ind.dent };
+}
+const rot = ([x, z], a) => [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)];
+const reach = rho => G.r0 * Math.exp(k * (rho + G.alpha * Math.PI / 180)) * Math.cos(G.alpha * Math.PI / 180);
+const Lcord = Math.hypot(G.pull[0] - rot(G.trigger, G.rho_rest)[0], G.pull[1] - rot(G.trigger, G.rho_rest)[1]);
+
+const stepEls = [...document.querySelectorAll("#steps li")];
+const $ = id => document.getElementById(id);
+function draw(t) {
+  const st = state(t);
+  anchor.setAttribute("transform", `translate(0,${st.z})`);
+  camR.setAttribute("transform", `rotate(${deg(st.rho)})`);
+  camL.setAttribute("transform", `scale(-1,1) rotate(${deg(st.rho)})`);
+  // trigger cords hang the finger-pull; bands run to the top of the sleeve
+  const [tx, tz] = rot(G.trigger, st.rho), [sx, sz] = rot(G.spring, st.rho);
+  const pz = tz - Math.sqrt(Math.max(0, Lcord * Lcord - (G.pull[0] - tx) ** 2));
+  pull.setAttribute("transform", `translate(0,${pz})`);
+  for (const [line, m] of [[cordR, 1], [cordL, -1]]) {
+    line.setAttribute("x1", m * tx); line.setAttribute("y1", tz);
+    line.setAttribute("x2", m * G.pull[0]); line.setAttribute("y2", pz);
+  }
+  for (const [line, m] of [[bandR, 1], [bandL, -1]]) {
+    line.setAttribute("x1", m * sx); line.setAttribute("y1", sz);
+    line.setAttribute("x2", 0); line.setAttribute("y2", -G.drop + G.sleeve_od / 2);
+  }
+  // load and wall reactions
+  const W = st.load * g, N = W / (2 * k), F = W / 2;
+  loadG.style.opacity = Math.min(1, st.load / Math.max(loadKg, 1) * 3);
+  const r = reach(st.rho), cz = st.z - r * Math.tan(G.alpha * Math.PI / 180);
+  const sc = 0.09, show = st.load > 0.05;
+  forces.style.opacity = show ? 1 : 0;
+  [1, -1].forEach((m, i) => {
+    const x = m * G.gap / 2;
+    fN[i].setAttribute("x1", x + m * Math.max(N * sc, 3) + m * 1); fN[i].setAttribute("y1", cz);
+    fN[i].setAttribute("x2", x); fN[i].setAttribute("y2", cz);
+    fF[i].setAttribute("x1", x - m * 1.2); fF[i].setAttribute("y1", cz - Math.max(F * sc, 2));
+    fF[i].setAttribute("x2", x - m * 1.2); fF[i].setAttribute("y2", cz);
+    lblN[i].setAttribute("x", m > 0 ? x + 3 : x - 3);
+    lblN[i].setAttribute("text-anchor", m > 0 ? "start" : "end");
+    lblN[i].setAttribute("y", -cz + 12);
+    lblN[i].textContent = show ? `N ${N.toFixed(0)} N` : "";
+    lblF[i].setAttribute("x", m > 0 ? x + 3 : x - 3);
+    lblF[i].setAttribute("text-anchor", m > 0 ? "start" : "end");
+    lblF[i].setAttribute("y", -cz + 20);
+    lblF[i].textContent = show ? `F ${F.toFixed(0)} N` : "";
+  });
+  lblW.setAttribute("x", 15); lblW.setAttribute("y", -(st.z - G.drop - 100) + 2.5);
+  lblW.textContent = st.load > 0.05 ? `${st.load.toFixed(1)} kg` : "";
+
+  $("caption").textContent = st.s.cap;
+  stepEls.forEach((li, i) => li.classList.toggle("on", i === st.s.step));
+  $("r-rho").textContent = `${deg(st.rho).toFixed(1)}°`;
+  const inGap = st.z > 0 && st.rho >= G.rho_gap - 1e-6;
+  $("r-span").textContent = `${(2 * Math.min(r, inGap ? G.gap / 2 + st.dent : r)).toFixed(1)} mm`;
+  $("r-load").textContent = `${st.load.toFixed(1)} kg`;
+  $("r-n").textContent = `${N.toFixed(0)} N`;
+  $("r-f").textContent = `${F.toFixed(0)} N`;
+  $("r-mu").textContent = `${k.toFixed(3)} of μ ≈ ${G.mu}`;
+  $("r-dent").textContent = `${st.dent.toFixed(2)} mm`;
+}
+
+function rating() {
+  const ok = loadKg <= G.rated_kg;
+  $("rating").textContent = `Rated ${G.rated_kg.toFixed(1)} kg at safety factor ${G.sf}, assuming only one of the two cams on each wall bears. The limit is the wood denting under the cams.`;
+  $("ratingchip").innerHTML = `<span class="chip ${ok ? "ok" : "bad"}">${loadKg} kg ${ok ? "within rating" : "over rating"}</span>`;
+}
+
+$("boltname").textContent = `M${G.bolt}`;
+$("gapname").textContent = G.gap;
+let playing = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let t = playing ? 0 : S[6].t0 + 0.5, last = null;
+function frame(now) {
+  if (playing) {
+    if (last !== null) t = (t + (now - last) / 1000) % T;
+    last = now;
+    $("scrub").value = Math.round(t / T * 1000);
+  }
+  draw(t);
+  requestAnimationFrame(frame);
+}
+$("play").textContent = playing ? "Pause" : "Play";
+$("play").addEventListener("click", () => {
+  playing = !playing; last = null;
+  $("play").textContent = playing ? "Pause" : "Play";
+});
+$("scrub").addEventListener("input", e => { playing = false; $("play").textContent = "Play"; t = e.target.value / 1000 * T; });
+$("load").addEventListener("input", e => { loadKg = +e.target.value; $("loadval").textContent = `${loadKg} kg`; rating(); });
+rating();
+draw(t);
+requestAnimationFrame(frame);
+</script>

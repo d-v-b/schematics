@@ -43,6 +43,11 @@ preview:
 mechanics *args:
     {{python}} mechanics.py "$@"
 
+# Write animation.html: the anchor setting, loading and releasing, from the real parts
+[positional-arguments]
+animate *args:
+    {{python}} animate.py "$@"
+
 # Run the geometry and mechanics tests
 test:
     {{python}} -m pytest -q
