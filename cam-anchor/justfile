@@ -38,7 +38,12 @@ preview:
     just render assembly_set.svg --part assembly {{args}}
     just render assembly_retracted.svg --part assembly --rho 0 {{args}}
 
-# Run the geometry tests
+# Strength and grip at a load, e.g. `just mechanics --load_kg 15 --cams_per_wall 2`
+[positional-arguments]
+mechanics *args:
+    {{python}} mechanics.py "$@"
+
+# Run the geometry and mechanics tests
 test:
     {{python}} -m pytest -q
 

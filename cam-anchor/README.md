@@ -51,6 +51,54 @@ above still holds.
 
 That covers the 80 mm gap with ±10 mm to spare, for uneven or bowed beams.
 
+## Strength
+
+`mechanics.py` works out each failure mode at a load. Its default worst
+case assumes only one cam per wall bears, because the beams are never flat
+along their length. That cam then takes half the load as friction.
+
+```
+10 kg (98 N), 1 cam(s) bearing per wall: each carries F 49 N up, N 197 N into the wall, R 203 N on the axle
+mode                    demand     limit      SF   fails at
+slip (mu needed)         0.249       0.4     1.6          -
+cam bearing               3.17        15     4.7      47 kg  MPa
+axle bending               210       640     3.0      30 kg  MPa
+eye bolt bending           142       640     4.5      45 kg  MPa
+plate net tension        0.973        15    15.4     154 kg  MPa
+plate shear-out          0.973      8.66     8.9      89 kg  MPa
+plate bearing             2.68        15     5.6      56 kg  MPa
+wall indent              0.982         5     5.1      48 kg  mm
+rated load at SF 3: 10.1 kg
+trigger pull with 5 N bands: up to 11 N
+```
+
+- **Slip** doesn't depend on the load. Its margin is μ / tan α, here 1.6,
+  and it rests entirely on the friction estimate. `validate()` refuses
+  tan α ≥ μ. If the cams slip in practice, lower `--alpha`: 12° gives 1.9
+  but needs more cam turn for the same range.
+- **The axle governs.** The M6 bolt is checked at its thread's minor
+  diameter against the yield of class 8.8 steel. The biggest load on it
+  isn't the weight. It's the cams' wall thrust N ≈ 2 W, which pushes in
+  opposite directions on neighbouring cams and bends the bolt between
+  them. Stacking L R R L keeps those opposed cams adjacent, and the worst
+  case is one outer L cam and the far R cam bearing. With all four cams
+  bearing, the axle's capacity rises to 44 kg.
+- **Wall indent** is rough:
+  - It takes softwood crushing across the grain at 2.5 MPa.
+  - The teeth sink in first, then the spiral's rounded surface flattens.
+  - Each mm of indent turns the cam further out, and it has 5 mm of reach
+    left beyond the 80 mm gap.
+- **The PETG parts** are checked against the 15 MPa creep ceiling used
+  across this repo, not their short-term strength. The anchor holds its
+  load indefinitely.
+
+```
+pixi run mechanics                       # the table above
+just mechanics --load_kg 15 --cams_per_wall 2
+```
+
+`check()` refuses a load over the rated load.
+
 ## Trigger and spring
 
 Each cam is a lever on the axle:
