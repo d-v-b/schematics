@@ -1,0 +1,17 @@
+[workspace]
+name = "cam-anchor"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[dependencies]
+python = ">=3.12"
+build123d = ">=0.9"
+just = "*"
+pytest = "*"
+
+[tasks]
+parts = "just parts"
+render = "just render"
+preview = "just preview"
+test = "just test"
+clean = "just clean"

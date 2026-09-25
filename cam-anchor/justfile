@@ -1,0 +1,47 @@
+# Dev actions for the cam anchor: four spring-set cams on an M6 axle that
+# grip the sides of the gap between two ceiling beams. Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+gap := "80"         # the gap between the beams, mm
+alpha := "14"       # cam angle, degrees; holds while tan(alpha) < mu
+reach_min := "34"   # reach per side from the axle, retracted, mm
+reach_max := "45"   # ... and fully expanded
+drop := "80"        # axle to eye, mm
+args := "--gap " + gap + " --alpha " + alpha + " --reach_min " + reach_min + " --reach_max " + reach_max + " --drop " + drop
+
+default:
+    @just --list
+
+# Render one part (.stl, .step or .svg) with any --param overrides, e.g. `just render cam.stl --part cam --alpha 12`
+[positional-arguments]
+render outfile *args:
+    {{python}} anchor.py -o "$@"
+
+# Render every part with the values above
+parts:
+    just render "{{out}}/cam_a{{alpha}}_r{{reach_min}}-{{reach_max}}_x4.stl" --part cam {{args}}
+    just render "{{out}}/plate_d{{drop}}_x2.stl" --part plate {{args}}
+    just render "{{out}}/sleeve.stl" --part sleeve {{args}}
+    just render "{{out}}/finger_pull.stl" --part pull {{args}}
+
+# Render the M6 hole-fit coupon
+coupon:
+    just render "{{out}}/coupon_m6_holes.stl" --part coupon {{args}}
+
+# Regenerate the drawings used by the README
+preview:
+    just render cam.svg --part cam {{args}}
+    just render assembly_set.svg --part assembly {{args}}
+    just render assembly_retracted.svg --part assembly --rho 0 {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
