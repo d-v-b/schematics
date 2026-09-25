@@ -18,12 +18,12 @@ Failure modes, each as a stress, or a ratio, against its limit:
 - **cam bearing:** R on the axle hole, R / (d t). The pin always pushes
   into the solid lobe (the contact lies on the spiral sector), so bearing is
   the only hub check.
-- **axle bending:** the M6 axle spans the plates as a simply supported beam.
+- **axle bending:** the steel axle bolt spans the plates as a simply supported beam.
   Each bearing cam pushes it with (-+N, F), inward from its wall and up. The
   horizontal pushes cancel in total but sit at different stations, so they
   bend the axle too. The check takes the worst combination of bearing cams
-  and the M6 thread's minor diameter.
-- **eye bolt bending:** W at mid-span of the M6 eye bolt, W L / 4.
+  and the thread's minor diameter.
+- **eye bolt bending:** W at mid-span of the eye bolt, W L / 4.
 - **plate lugs:** each plate hangs from the axle and carries the eye. At
   each hole the checks are net-section tension, (P / ((w - d) t)), shear-out
   of the rounded end, (P / (2 (w/2 - d/2) t)), and bearing, (P / (d t)).
@@ -59,7 +59,8 @@ from anchor import AnchorParams, torque
 G = 9.81
 PETG_SUSTAINED = 15.0  # MPa, the creep ceiling used across this repo
 STEEL_8_8_YIELD = 640.0  # MPa
-M6_MINOR = 4.773  # mm, the thread's minor diameter
+# mm, each metric coarse thread's minor diameter (ISO 724 d3)
+BOLT_MINOR = {5: 3.908, 6: 4.773, 8: 6.466, 10: 8.160, 12: 9.853}
 WOOD_PERP_GRAIN = 2.5  # MPa, softwood compression across the grain
 
 
@@ -168,7 +169,9 @@ def modes(p: AnchorParams, ld: Loading, W: float | None = None) -> list[Mode]:
     n = ld.cams_per_wall
     _, N, R = cam_forces(p, W, n)
     ys, span = stations(p)
-    s_bolt = math.pi * M6_MINOR**3 / 32
+    if p.bolt not in BOLT_MINOR:
+        raise ValueError(f"no thread data for M{p.bolt}; known: {sorted(BOLT_MINOR)}")
+    s_bolt = math.pi * BOLT_MINOR[p.bolt] ** 3 / 32
 
     worst_m, plate_p = 0.0, 0.0
     for b in bearing_sets(n):

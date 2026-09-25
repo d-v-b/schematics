@@ -99,3 +99,8 @@ def test_overload():
 def test_cams_per_wall():
     with pytest.raises(ValueError, match="cams_per_wall"):
         modes(AnchorParams(), Loading(cams_per_wall=3))
+
+
+def test_unknown_bolt():
+    with pytest.raises(ValueError, match="thread data"):
+        modes(AnchorParams(bolt=7, hole=7.4), Loading())

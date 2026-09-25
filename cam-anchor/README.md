@@ -5,10 +5,10 @@ where it sets itself against the beams' rough-sawn sides. You hang things
 from it, such as a clothes-drying rod on cord. The more weight you hang on
 it, the harder it grips. You take it out by pulling a trigger.
 
-Four flat cams turn on one M6 bolt, which runs along the beams. Two cams
+Four flat cams turn on one M8 bolt, which runs along the beams. Two cams
 face each wall. They stack L R R L, so the grip is symmetric and the unit
 can't twist. Two side plates carry that axle and, 80 mm below it, a second
-M6 bolt inside a printed sleeve. The sleeve is the eye you hang the load
+M8 bolt inside a printed sleeve. The sleeve is the eye you hang the load
 from.
 
 ![set in the gap](assembly_set.svg)
@@ -61,14 +61,14 @@ along their length. That cam then takes half the load as friction.
 10 kg (98 N), 1 cam(s) bearing per wall: each carries F 49 N up, N 197 N into the wall, R 203 N on the axle
 mode                    demand     limit      SF   fails at
 slip (mu needed)         0.249       0.4     1.6          -
-cam bearing               3.17        15     4.7      47 kg  MPa
-axle bending               210       640     3.0      30 kg  MPa
-eye bolt bending           142       640     4.5      45 kg  MPa
-plate net tension        0.973        15    15.4     154 kg  MPa
-plate shear-out          0.973      8.66     8.9      89 kg  MPa
-plate bearing             2.68        15     5.6      56 kg  MPa
+cam bearing               2.41        15     6.2      62 kg  MPa
+axle bending              84.6       640     7.6      76 kg  MPa
+eye bolt bending          57.3       640    11.2     112 kg  MPa
+plate net tension          1.1        15    13.7     137 kg  MPa
+plate shear-out            1.1      8.66     7.9      79 kg  MPa
+plate bearing             2.04        15     7.4      74 kg  MPa
 wall indent              0.982         5     5.1      48 kg  mm
-rated load at SF 3: 10.1 kg
+rated load at SF 3: 20.7 kg
 trigger pull with 5 N bands: up to 11 N
 ```
 
@@ -76,18 +76,21 @@ trigger pull with 5 N bands: up to 11 N
   and it rests entirely on the friction estimate. `validate()` refuses
   tan α ≥ μ. If the cams slip in practice, lower `--alpha`: 12° gives 1.9
   but needs more cam turn for the same range.
-- **The axle governs.** The M6 bolt is checked at its thread's minor
-  diameter against the yield of class 8.8 steel. The biggest load on it
-  isn't the weight. It's the cams' wall thrust N ≈ 2 W, which pushes in
-  opposite directions on neighbouring cams and bends the bolt between
-  them. Stacking L R R L keeps those opposed cams adjacent, and the worst
-  case is one outer L cam and the far R cam bearing. With all four cams
-  bearing, the axle's capacity rises to 44 kg.
-- **Wall indent** is rough:
+- **The axle** is an M8 bolt, checked at its thread's minor diameter
+  against the yield of class 8.8 steel. The biggest load on it isn't the
+  weight. It's the cams' wall thrust N ≈ 2 W, which pushes in opposite
+  directions on neighbouring cams and bends the bolt between them. Stacking
+  L R R L keeps those opposed cams adjacent, and the worst case is one outer
+  L cam and the far R cam bearing. An M6 axle, with a 30 kg capacity, used
+  to govern the rating at 10 kg. M8 has about 2.5× the section.
+- **Wall indent governs**, and it is the roughest estimate:
   - It takes softwood crushing across the grain at 2.5 MPa.
   - The teeth sink in first, then the spiral's rounded surface flattens.
   - Each mm of indent turns the cam further out, and it has 5 mm of reach
     left beyond the 80 mm gap.
+  - Indent grows faster than the load, so the rated load (the indent at a
+    third of the reserve) is 20.7 kg, not 48 / 3.
+  - With both cams on each wall bearing, the rated load is 36 kg.
 - **The PETG parts** are checked against the 15 MPa creep ceiling used
   across this repo, not their short-term strength. The anchor holds its
   load indefinitely.
@@ -125,13 +128,13 @@ Retracted by the trigger, the unit spans 68 mm.
 | side plate | 2 | flat |
 | eye sleeve | 1 | upright |
 | finger-pull | 1 | flat; tie both of one side's cords through that side's hole |
-| M6 hole coupon | 1 | Ø 6.2 / 6.4 / 6.6, each labelled; print it first and set `--hole` to the best fit |
+| M8 hole coupon | 1 | Ø 8.2 / 8.4 / 8.6, each labelled; print it first and set `--hole` to the best fit |
 
 Hardware:
-- M6 × 80 bolt and nylock nut (the axle; the stack is 56 mm, plus 12 mm of
-  plates)
-- M6 × 80 bolt and nut (the eye)
-- 10 M6 washers: two in each gap, including between each outer cam and its
+- M8 × 80 bolt and nylock nut (the axle; the stack is 56 mm, plus 12 mm of
+  plates), class 8.8
+- M8 × 80 bolt and nut (the eye), class 8.8
+- 10 M8 washers (1.6 mm): two in each gap, including between each outer cam and its
   plate
 - about 1.5 m of 1–2 mm cord
 - 2–4 rubber bands
@@ -154,7 +157,7 @@ Hardware:
 ```
 pixi run parts          # stl/cam_a14_r34-45_x4.stl, plate, sleeve, finger_pull
 pixi run render out.stl --part cam --alpha 12
-just coupon             # stl/coupon_m6_holes.stl
+just coupon             # stl/coupon_m8_holes.stl
 pixi run preview        # the drawings above
 pixi run test
 ```
@@ -169,7 +172,7 @@ pixi run test
 | teeth | 0.8 mm deep, 2.5 mm pitch | `--tooth_d`, `--tooth_pitch` |
 | axle to eye | 80 mm | `--drop` |
 | plates | 24 × 6 mm | `--plate_w`, `--plate_t` |
-| bolt holes | Ø 6.4 | `--hole` |
+| bolts, and their holes | M8, Ø 8.4 | `--bolt`, `--hole` |
 
 `validate()` refuses a cam that could slip (tan α ≥ μ), a reach range that
 doesn't include the gap, plates wider than the retracted span, and lobes

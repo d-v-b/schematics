@@ -1,10 +1,10 @@
 """A cam anchor that sets itself in the gap between two ceiling beams and
 holds a hanging load by pressing on the beams' vertical sides.
 
-Four flat cams turn on one M6 bolt, the axle, which runs along the beams.
+Four flat cams turn on one M8 bolt, the axle, which runs along the beams.
 Two cams face each wall. Along the axle they stack L R R L, so the grip is
 symmetric and the unit cannot twist. Two side plates carry the axle and,
-``drop`` below it, a second M6 bolt with a printed sleeve: the eye the load
+``drop`` below it, a second M8 bolt with a printed sleeve: the eye the load
 hangs from.
 
 Each cam's working edge is a logarithmic spiral, r = r0 * exp(k * psi) with
@@ -91,9 +91,10 @@ class AnchorParams:
     tooth_d: float = 0.8
     tooth_pitch: float = 2.5
     cam_t: float = 10.0
-    hub_r: float = 8.0
-    # The M6 bolt holes, and the cord and band holes.
-    hole: float = 6.4
+    hub_r: float = 10.0
+    # The bolts (metric size), their clearance holes, and the cord and band holes.
+    bolt: int = 8
+    hole: float = 8.4
     cord_hole: float = 3.0
     # The trigger hole's distance in from the spiral, and the spring hole's
     # radius on the inboard arm.
@@ -104,10 +105,10 @@ class AnchorParams:
     plate_w: float = 24.0
     plate_t: float = 6.0
     drop: float = 80.0
-    # Between the cams, and between each outer cam and its plate: two M6
+    # Between the cams, and between each outer cam and its plate: two M8
     # washers, room for the trigger cords that run down the cams' faces.
     washer_t: float = 3.2
-    sleeve_od: float = 12.0
+    sleeve_od: float = 14.0
     # The finger-pull's cord holes sit pull_x either side of centre, and it
     # hangs about pull_below under the eye.
     pull_x: float = 12.0
@@ -300,12 +301,13 @@ def finger_pull(p: AnchorParams) -> Part:
     return extrude(s, amount=p.pull_t)
 
 
-COUPON_HOLES = (6.2, 6.4, 6.6)
+COUPON_CLEARANCES = (0.2, 0.4, 0.6)
 
 
 def coupon(p: AnchorParams) -> Part:
-    """A strip with a trial hole for the M6 bolt at each size, the size engraved under each."""
-    t, pitch = 4.0, 14.0
+    """A strip with a trial clearance hole for the bolt at each size, the size engraved under each."""
+    COUPON_HOLES = [p.bolt + c for c in COUPON_CLEARANCES]
+    t, pitch = 4.0, 16.0
     s = Rectangle(pitch * len(COUPON_HOLES) + 4, 20)
     xs = [(i - (len(COUPON_HOLES) - 1) / 2) * pitch for i in range(len(COUPON_HOLES))]
     s -= [Pos(x, 3) * Circle(d / 2) for x, d in zip(xs, COUPON_HOLES)]

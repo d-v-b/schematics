@@ -1,4 +1,4 @@
-# Dev actions for the cam anchor: four spring-set cams on an M6 axle that
+# Dev actions for the cam anchor: four spring-set cams on an M8 axle that
 # grip the sides of the gap between two ceiling beams. Run `just` to list them.
 #
 # Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
@@ -28,9 +28,9 @@ parts:
     just render "{{out}}/sleeve.stl" --part sleeve {{args}}
     just render "{{out}}/finger_pull.stl" --part pull {{args}}
 
-# Render the M6 hole-fit coupon
+# Render the bolt hole-fit coupon
 coupon:
-    just render "{{out}}/coupon_m6_holes.stl" --part coupon {{args}}
+    just render "{{out}}/coupon_m8_holes.stl" --part coupon {{args}}
 
 # Regenerate the drawings used by the README
 preview:
