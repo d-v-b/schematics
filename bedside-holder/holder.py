@@ -5,14 +5,17 @@ pocket hanging down the rail's outer face.
 The strip's centreline is a chain of straight lines and tangent arcs; the
 strip is that centreline thickened ``t / 2`` either side. From the bed side:
 a flared tip, the sprung inner leaf, a bend over the rail's inner top
-corner, a straight across the top, a bend over the outer top corner, the
-hanger down the outer face, a 180 degree J that is the pocket's floor, and
-a spring lip that leans in and flares out again as a lead-in.
+corner, a straight across the top, a bend over the outer top corner that
+stops ``lean`` short of vertical, the hanger leaning down and away from the
+rail's outer face, a 180 degree J in which the device's foot seats, and a
+spring lip that leans in and flares out again as a lead-in. A solid pad,
+round-nosed, holds the hanger off the rail face ``pad_y`` below its top, so
+the device lying on the hanger tips its top toward the bed.
 
 Relaxed, the inner leaf overlaps the rail by ``inner_pre`` and the lip
 overlaps the device by ``lip_pre``; both are cantilevers of the strip that
 those overlaps preload. The lip pushes the device's lower back onto the
-hanger, so it rests back against the hanger.
+hanger, and the lean lays the rest of it there.
 
 Coordinates: X across the rail, which occupies -rail_t <= x <= 0 (+x away
 from the bed); Y up, with y = 0 the rail's top edge; Z along the rail. The
@@ -60,6 +63,10 @@ class HolderParams:
     device_t: float = 11.5        # the device's thickness: 11.5 MacBook Air 15", 9.3 iPhone 4
     slot_clearance: float = 0.5   # the pocket's gap is device_t plus this
     drop: float = 200.0           # where the device's foot seats (the J's centre) below the rail's top edge
+    lean: float = 7.0             # the hanger's lean off the rail face, deg: the device's top tips toward the bed
+    rail_h: float = 160.0         # the bed rail's height
+    pad_y: float = 140.0          # the pad's centre, below the rail's top edge
+    pad_r: float = 6.0            # the pad's half-height, and its nose's radius on the rail face
     t: float = 3.0                # strip thickness
     bend_ri: float = 3.5          # inside radius of the bends over the rail's top corners
     inner_len: float = 26.0       # the inner leaf's straight
@@ -97,14 +104,23 @@ class HolderParams:
         return self.bend_ri * math.sqrt(0.5)
 
     @property
-    def hanger_x(self) -> float:
-        """The hanger's centreline."""
-        return -self._k + self.rc
+    def _a(self) -> float:
+        return math.radians(self.lean)
 
     @property
-    def back_x(self) -> float:
-        """The hanger's outer face, where the device's back rests."""
-        return self.hanger_x + self.t / 2
+    def hanger_dir(self) -> Pt:
+        """Unit vector down the hanger."""
+        return (math.sin(self._a), -math.cos(self._a))
+
+    @property
+    def hanger_n(self) -> Pt:
+        """Unit normal off the hanger, away from the rail, toward the device."""
+        return (math.cos(self._a), math.sin(self._a))
+
+    @property
+    def hanger_start(self) -> Pt:
+        """The hanger's centreline where the outer corner bend ends."""
+        return (-self._k + self.rc * math.cos(self._a), -self._k + self.rc * math.sin(self._a))
 
     @property
     def gap(self) -> float:
@@ -115,10 +131,45 @@ class HolderParams:
         return self.gap / 2 + self.t / 2
 
     @property
-    def j_y(self) -> float:
-        """Height of the J's centre, where the device's foot seats, and of
-        the lip's root."""
-        return -self.drop
+    def hanger_end(self) -> Pt:
+        """The hanger's centreline where the J begins: its centre, j_r off
+        the hanger, is drop below the rail top."""
+        (x, y), (dx, dy) = self.hanger_start, self.hanger_dir
+        n = (y - (-self.drop - self.j_r * self.hanger_n[1])) / -dy
+        return (x + n * dx, y + n * dy)
+
+    @property
+    def hanger_len(self) -> float:
+        (x0, y0), (x1, y1) = self.hanger_start, self.hanger_end
+        return math.hypot(x1 - x0, y1 - y0)
+
+    def hanger_at(self, y: float) -> Pt:
+        """The hanger's centreline at height y."""
+        (x0, y0), (dx, dy) = self.hanger_start, self.hanger_dir
+        return (x0 + (y - y0) / dy * dx, y)
+
+    def world(self, u: float, v: float) -> Pt:
+        """The pocket's frame: u across the slot away from the hanger, v up
+        the hanger, from the J's centre, where the device seats."""
+        (x, y), (nx, ny), (dx, dy) = self.hanger_end, self.hanger_n, self.hanger_dir
+        return (x + (self.j_r + u) * nx - v * dx, y + (self.j_r + u) * ny - v * dy)
+
+    def local(self, q: Pt) -> Pt:
+        """The inverse of world."""
+        cx, cy = self.world(0, 0)
+        (nx, ny), (dx, dy) = self.hanger_n, self.hanger_dir
+        return ((q[0] - cx) * nx + (q[1] - cy) * ny, -((q[0] - cx) * dx + (q[1] - cy) * dy))
+
+    @property
+    def pad_axis(self) -> tuple[Pt, Pt]:
+        """The pad is a stadium of radius pad_r round this line, from its
+        nose's centre (pad_r off the rail face) to the hanger's centreline."""
+        return ((self.pad_r, -self.pad_y), self.hanger_at(-self.pad_y))
+
+    @property
+    def pad_thick(self) -> float:
+        """The pad's span from the rail face to the hanger's rail-side face."""
+        return self.hanger_at(-self.pad_y)[0] - self.t / 2 / math.cos(self._a)
 
     @property
     def top_y(self) -> float:
@@ -183,7 +234,8 @@ class HolderParams:
     # --- the lip -----------------------------------------------------------
 
     def _lip(self, straight: float) -> list[Seg]:
-        tw = Turtle((self.hanger_x + 2 * self.j_r, self.j_y), UP)
+        # from the J's far end, heading back up the hanger
+        tw = Turtle(self.world(self.j_r, 0), UP + self._a)
         tw.line(self.lip_base).arc(self.lip_r, math.radians(self.lip_lean)).line(straight)
         tw.arc(self.lip_flare_r, -math.radians(self.lip_flare_deg)).line(self.lip_tip)
         return tw.segs
@@ -192,10 +244,11 @@ class HolderParams:
     def lip_straight(self) -> float:
         """The straight after the lip's lean, solved so the lip's inside
         reaches lip_pre into the device. Its innermost point is where the
-        flare turns it back through vertical."""
-        target = self.back_x + self.device_t - self.lip_pre
+        flare turns it back parallel to the hanger. Worked across the slot
+        (u in the pocket's frame), so it holds at any hanger lean."""
+        target = -self.gap / 2 + self.device_t - self.lip_pre
         a = math.radians(self.lip_lean)
-        x0 = self.hanger_x + 2 * self.j_r - self.lip_r * (1 - math.cos(a))
+        x0 = self.j_r - self.lip_r * (1 - math.cos(a))
         # walking up, the device is on the left
         innermost = x0 - self.lip_flare_r * (1 - math.cos(a)) - self.t / 2
         return (innermost - target) / math.sin(a) if a > 0 else math.nan
@@ -203,11 +256,11 @@ class HolderParams:
     @property
     def lip_contact(self) -> Pt:
         pts = sample(self._lip(self.lip_straight), self.t / 2)
-        return min(pts, key=lambda q: q[0])
+        return min(pts, key=lambda q: self.local(q)[0])
 
     @property
     def lip_arm(self) -> float:
-        return self.lip_contact[1] - self.j_y
+        return self.local(self.lip_contact)[1]
 
     @property
     def lip_stress(self) -> float:
@@ -219,7 +272,7 @@ class HolderParams:
         dims = ("rail_t", "mattress_clear", "device_t", "slot_clearance", "drop", "t", "bend_ri", "inner_len",
                 "inner_pre", "inner_flare_r", "inner_flare_deg", "lip_base", "lip_r", "lip_lean", "lip_pre",
                 "lip_flare_r", "lip_flare_deg", "lip_tip", "stub", "length", "label_depth", "label_size",
-                "modulus", "creep_limit", "max_size")
+                "modulus", "creep_limit", "max_size", "lean", "rail_h", "pad_y", "pad_r")
         bad = [d for d in dims if getattr(self, d) <= 0]
         if bad:
             raise ValueError(f"must be positive: {', '.join(bad)}")
@@ -238,6 +291,20 @@ class HolderParams:
         if not self.lip_straight > 0:
             raise ValueError(
                 "the lip reaches the device before it stops leaning: cut lip_r or lip_lean, or add lip_pre"
+            )
+        if self.pad_y + self.pad_r > self.rail_h:
+            raise ValueError(
+                f"the pad hangs off the bottom of the rail ({self.pad_y + self.pad_r:g} below its top, on a "
+                f"{self.rail_h:g} rail): raise pad_y or shrink pad_r"
+            )
+        if not (self.hanger_end[1] < -self.pad_y - self.pad_r and -self.pad_y + self.pad_r < self.hanger_start[1]):
+            raise ValueError(
+                "the pad must meet the hanger between the rail top and the pocket: move pad_y or deepen drop"
+            )
+        if self.pad_axis[1][0] <= self.pad_r:
+            raise ValueError(
+                f"lean {self.lean:g} is too small to hold the hanger off the rail at the pad: "
+                "lean more, lower the pad, or shrink pad_r"
             )
         if self.protrusion > self.mattress_clear:
             raise ValueError(
@@ -262,7 +329,8 @@ class HolderParams:
 
     def report(self) -> str:
         return (
-            f"{self.section} for a {self.device_t:g} device on a {self.rail_t:g} rail, floor {self.drop:g} down, "
+            f"{self.section} for a {self.device_t:g} device on a {self.rail_t:g} rail, seated {self.drop:g} down, "
+            f"leaning {self.lean:g} deg on a {self.pad_thick:.1f} pad, "
             f"{self.t:g} strip x {self.length:g}: inner leaf leans {math.degrees(self.inner_lean):.1f} deg, "
             f"{self.inner_stress:.1f} MPa, stands {self.protrusion:.2f} off the rail; lip {self.lip_stress:.1f} MPa; "
             f"creep ceiling {self.creep_limit:g}"
@@ -277,13 +345,14 @@ def centreline(p: HolderParams) -> list[Seg]:
         tw = Turtle(leaf[-1].end, leaf[-1].h1 + math.pi).replay_reversed(leaf)
         tw.arc(p.rc, -math.pi / 2)  # the rest of the inner corner bend, to heading +x
         tw.line(p.rail_t - 2 * p._k)
-        tw.arc(p.rc, -math.pi / 2)
+        tw.arc(p.rc, -(math.pi / 2 - p._a))  # stops lean short of vertical
     else:
-        tw = Turtle((p.hanger_x, p.j_y + p.stub), DOWN)
+        (x, y), (dx, dy) = p.hanger_end, p.hanger_dir
+        tw = Turtle((x - p.stub * dx, y - p.stub * dy), DOWN + p._a)
     if p.section == "clamp":
-        tw.line(tw.pos[1] + p.stub)
+        tw.line((tw.pos[1] + p.stub) / math.cos(p._a))  # to y = -stub
         return tw.segs
-    tw.line(tw.pos[1] - p.j_y)
+    tw.line(p.hanger_len if p.section == "full" else p.stub)
     tw.arc(p.j_r, math.pi)
     return tw.segs + p._lip(p.lip_straight)
 
@@ -296,23 +365,32 @@ def _wire(segs: list[Seg]) -> Wire:
 def profile(p: HolderParams) -> Sketch:
     p.validate()
     wire = _wire(centreline(p))
-    return Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
+    sketch = Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
+    if p.section == "full":
+        pad = Wire([Line(*p.pad_axis)]).offset_2d(p.pad_r, kind=Kind.ARC, side=Side.BOTH, closed=True)
+        sketch += Sketch([make_face(pad)])
+    return sketch
 
 
 def label_y(p: HolderParams) -> float:
-    """Where along the hanger's rail-side face the ID is centred."""
+    """Where along the hanger's rail-side face the ID is centred: midway
+    down the stub on a coupon, and between the rail top and the pad on the
+    full part."""
+    top = p.hanger_start[1]
     if p.section == "clamp":
-        return -p._k - p.stub / 2
+        return (top - p.stub) / 2
     if p.section == "pocket":
-        return p.j_y + p.stub / 2
-    return -p.drop / 2
+        return p.hanger_end[1] + p.stub / 2 * math.cos(p._a)
+    return (top - p.pad_y + p.pad_r) / 2
 
 
 def holder(p: HolderParams) -> Part:
     body = extrude(profile(p), amount=p.length)
     if p.label:
         # on the hanger's face toward the rail, reading down the hanger
-        face = Plane(origin=(p.hanger_x - p.t / 2, label_y(p), p.length / 2), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
+        (x, y), (dx, dy), (nx, ny) = p.hanger_at(label_y(p)), p.hanger_dir, p.hanger_n
+        origin = (x - p.t / 2 * nx, y - p.t / 2 * ny, p.length / 2)
+        face = Plane(origin=origin, x_dir=(dx, dy, 0), z_dir=(-nx, -ny, 0))
         text = face * Text(p.label, font_size=p.label_size, font_style=FontStyle.BOLD)
         body -= extrude(text, amount=-p.label_depth)
     return body
@@ -320,10 +398,12 @@ def holder(p: HolderParams) -> Part:
 
 def _svg(p: HolderParams, out: Path) -> None:
     """The profile, relaxed, over the rail (dashed) with the device ghosted."""
-    from build123d import ExportSVG, LineType, Location, Rectangle
+    from build123d import ExportSVG, LineType, Location, Polygon, Rectangle
 
-    rail = Rectangle(p.rail_t, 160).moved(Location((-p.rail_t / 2, -80)))
-    dev = Rectangle(p.device_t, 60).moved(Location((p.back_x + p.device_t / 2, -p.drop + 30)))
+    rail = Rectangle(p.rail_t, p.rail_h).moved(Location((-p.rail_t / 2, -p.rail_h / 2)))
+    back = -p.gap / 2
+    dev = Polygon(*[p.world(u, v) for u, v in ((back, 0), (back + p.device_t, 0), (back + p.device_t, 60), (back, 60))],
+                  align=None)
     svg = ExportSVG(scale=2, margin=6, line_weight=0.35)
     svg.add_layer("rail", line_color=(150, 150, 150), line_type=LineType.ISO_DASH, line_weight=0.2)
     svg.add_layer("device", line_color=(190, 190, 190), line_type=LineType.ISO_DOT, line_weight=0.2)

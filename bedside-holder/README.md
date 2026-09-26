@@ -2,8 +2,8 @@
 
 A clip that hooks over the bed's side rail and stores a device upright in a
 pocket that hangs down the rail's outer face. The device sits low, so it's
-out of the way when you get in and out of bed, and it rests back against
-the rail. The same design makes a laptop clip (a 15" MacBook Air; print
+out of the way when you get in and out of bed, and it leans 7° with its top
+toward the bed, so it can't flop outward. The same design makes a laptop clip (a 15" MacBook Air; print
 two, about 200 mm apart) and a phone clip (an iPhone 4).
 
 It's one 3 mm strip, bent like heat-formed plastic: straight runs joined by
@@ -14,11 +14,16 @@ tangent arcs, thickened evenly either side. From the bed side:
 - two soft bends over the rail's top corners, with an inside radius of 3.5.
   They're placed to touch the corners, so the strip stands about 1 mm clear
   of the top edge and doesn't care how square it is
-- the **hanger** down the outer face; the device's back rests on it
+- the **hanger**, leaning 7° down and away from the rail's outer face. The
+  device lies on it, so the device's top tips toward the bed: the laptop's
+  top ends up 35 mm above the rail top, right over the rail's outer face
+- a solid **pad** with a round nose, 140 mm below the rail top and 20 mm
+  clear of the rail's bottom edge, that holds the hanger off the rail
+  (18 mm thick at 7°). The device's weight presses the hanger onto the pad
+  and the clamp, so the lean is set by solid material, not by a spring
 - a 180° **J**, in which the device's foot seats 200 mm below the rail top
 - the **spring lip**, which leans in 6° to overlap the device by 0.75 mm,
-  pressing its lower back onto the hanger so it rests back against it, then
-  flares out as a lead-in
+  pressing its lower back onto the hanger, then flares out as a lead-in
 
 ![profile](profile.svg)
 
@@ -36,7 +41,9 @@ leaf and 12.4 MPa in the lip at the defaults, against PETG's creep ceiling
 of about 15 MPa. The bends add compliance on top of this, so the estimate
 is conservative. `validate()` refuses any geometry over the ceiling, and
 any inner leaf that would stand more than 5 mm off the rail, since that's
-all the room there is before the mattress.
+all the room there is before the mattress. It also refuses a pad that
+would hang off the bottom of the rail or miss the hanger, and a lean too
+small to hold the hanger off the rail at the pad.
 
 A rail 0.5 mm thicker than nominal takes the inner leaf over the ceiling.
 That's what the coupons are for.

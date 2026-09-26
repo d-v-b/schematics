@@ -3,7 +3,8 @@
 A clip that hooks over the bed's side rail and stores a device upright in a
 pocket that hangs down the rail's outer face. It's for storage, not
 viewing: the device sits low, out of the way when getting in and out of
-bed, and rests back against the rail. One parametric profile makes both
+bed, and leans with its top toward the bed so it can't flop outward. One
+parametric profile makes both
 the laptop and the phone versions. Printed in PETG.
 
 ## Requirements
@@ -17,8 +18,10 @@ the laptop and the phone versions. Printed in PETG.
   (115 × 59 × 9.3 mm).
 - The device's seat is 160–200 mm below the rail top (default 200), so the
   phone sits wholly below the rail top and the laptop pokes out about
-  38 mm, at or below the mattress top.
-- The device rests back against the hanger and doesn't rattle.
+  35 mm, at or below the mattress top.
+- The device leans `lean` (default 7°) with its top toward the bed, lying
+  on the hanger, and doesn't rattle. (Added after the first build: an
+  upright laptop could flop away from the bed.)
 - Looks like one strip of heat-bent plastic: constant thickness, smooth
   bends, no sharp corners. Its compliance comes from those bends.
 - Prints flat on a 256 × 256 mm bed, with the extrusion (along the rail)
@@ -50,8 +53,11 @@ side:
    next to it, and it stands about 0.29·`bend_ri` (1 mm) off the top edge
    and off the faces near the corner.
 4. **Top:** a straight across the rail.
-5. **Outer corner bend:** the same as 3, mirrored.
-6. **Hanger:** a straight down the outer face, to the J.
+5. **Outer corner bend:** the same as 3, mirrored, but it stops `lean`
+   short of vertical.
+6. **Hanger:** a straight leaning `lean` down and away from the outer
+   face, to the J. Everything from here on (J, lip, flare) is built in the
+   hanger's frame, so the pocket leans with it.
 7. **J-bend:** a 180° arc whose centreline radius is gap/2 + t/2, where
    gap = `device_t` + `slot_clearance` (default 0.5). Its centre sits at
    y = −`drop` (default 200), which is where the device's foot seats; its
@@ -59,14 +65,24 @@ side:
 8. **Lip:** a straight of 10, then an arc of R 20 leaning `lip_lean`
    (default 6°) in toward the device, then a straight whose length is
    solved so that, relaxed, the lip's inner surface reaches the device by
-   `lip_pre` (default 0.75) where its flare turns it back through
-   vertical.
+   `lip_pre` (default 0.75) where its flare turns it back parallel to the
+   hanger.
 9. **Lip flare:** an arc of R 8 turning 40° outward, then a 4 mm straight,
    as a lead-in.
 
-The device's back rests on the hanger's outer surface, and its foot sits in
-the J. The lip's preload pushes the device's lower back onto the hanger, so
-it rests back against it.
+**Pad.** A solid stadium of radius `pad_r` (default 6) runs from the
+hanger's centreline back to the rail's outer face at y = −`pad_y` (default
+140, which leaves 14 mm to the bottom of the 160 mm rail). Its round nose
+touches the rail face along one line. At 7° it is about 18 mm thick. It
+isn't part of the strip: it is solid so the lean doesn't sag under the
+laptop.
+
+The device's back lies on the hanger's outer surface, and its foot sits in
+the J. The lip's preload pushes the device's lower back onto the hanger,
+and the lean lays the rest of it there. The device's weight presses the
+hanger onto the pad and the clamp, so the lean is set by solid material.
+The laptop's top ends about 35 mm above the rail top, right over the
+rail's outer face.
 
 Parts, all from this one profile:
 
@@ -81,7 +97,8 @@ A frozen `HolderParams` dataclass with the defaults above, plus `rail_t`
 23.0, `mattress_clear` 5.0, `label` "", `label_depth` 0.4, `label_size`
 5.0, `modulus` 2000 MPa and `creep_limit` 15 MPa (PETG, the same values as
 the other schematics). It also has `section` (`"full"`, `"clamp"` or
-`"pocket"`), `stub` 40 (the hanger kept on a coupon) and `max_size` 250.
+`"pocket"`), `stub` 40 (the hanger kept on a coupon), `max_size` 250,
+`lean` 7°, `rail_h` 160, `pad_y` 140 and `pad_r` 6.
 
 ## Validation
 
@@ -98,6 +115,10 @@ the other schematics). It also has `section` (`"full"`, `"clamp"` or
   margin on the 256 bed
 - inner-leaf or lip bending stress above `creep_limit`
 - `label_depth` ≥ `t`
+- a pad that hangs off the bottom of the rail (`pad_y` + `pad_r` >
+  `rail_h`)
+- a pad that misses the hanger (above its start, or below the J)
+- a lean too small to hold the hanger off the rail at the pad
 
 **Stress model.** Each spring is treated as a cantilever of the strip,
 deflected at its knee by its preload δ:
@@ -163,11 +184,16 @@ No `conftest.py` is needed, since nothing is shared between the test files.
 
 Following the repo's rule, there is one test that builds the part across a
 grid of reasonable parameters: both devices, each `section`, `t` 2.5 and
-3.0, and a few `drop` values. For each, it checks that:
+3.0, a few `drop` values, and leans of 5°, 7° and 9°. The pocket is
+checked in its own frame, from the J's centre with u across the slot and v
+up the hanger. For each, it checks that:
 
 - the solid is valid
 - its bounding box matches the expected extents
 - the device's seat, the J's centre, is at y = −`drop`
+- the hanger's device-side face lies along the lean
+- on the full part, the pad touches the rail face at y = −`pad_y`, and only
+  there
 - the relaxed slot gap at the lip knee equals `device_t` − `lip_pre`
 - the inner leaf's knee overlaps the rail by `inner_pre`
 - the mattress-side protrusion is ≤ `mattress_clear`

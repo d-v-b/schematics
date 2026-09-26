@@ -10,10 +10,11 @@ out := "stl"
 t := "3"              # strip thickness, mm
 inner_pre := "1.0"    # relaxed overlap of the inner leaf into the rail, mm
 lip_pre := "0.75"     # relaxed overlap of the lip into the device, mm
-drop := "200"         # pocket floor below the rail's top edge, mm
+drop := "200"         # where the device's foot seats below the rail's top edge, mm
+lean := "7"           # the hanger's lean off the rail, deg: tips the device's top toward the bed
 laptop_t := "11.5"    # MacBook Air 15"
 phone_t := "9.3"      # iPhone 4, no case
-args := "--t " + t + " --inner_pre " + inner_pre + " --lip_pre " + lip_pre + " --drop " + drop
+args := "--t " + t + " --inner_pre " + inner_pre + " --lip_pre " + lip_pre + " --drop " + drop + " --lean " + lean
 
 # --- Coupons: the profile extruded 10 mm, cropped to the clamp or the pocket.
 # Short fit tests, so the creep ceiling is relaxed: the sweep deliberately
