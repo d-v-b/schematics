@@ -78,8 +78,8 @@ Parts, all from this one profile:
 A frozen `HolderParams` dataclass with the defaults above, plus `rail_t`
 23.0, `mattress_clear` 5.0, `label` "", `label_depth` 0.4, `label_size`
 5.0, `modulus` 2000 MPa and `creep_limit` 15 MPa (PETG, the same values as
-the other schematics). It also has `section`: `"full"`, `"clamp"` or
-`"pocket"`.
+the other schematics). It also has `section` (`"full"`, `"clamp"` or
+`"pocket"`), `stub` 40 (the hanger kept on a coupon) and `max_size` 250.
 
 ## Validation
 
@@ -102,13 +102,15 @@ deflected at its knee by its preload δ:
 
     σ = 3·E·(t/2)·δ / L²
 
-L is the leaf's length from its root bend to its knee: about 28 mm for the
-inner leaf and 25 mm for the lip. At t = 3 that gives about 11.5 MPa and
-11 MPa. The bends add compliance on top of this, so the cantilever is
-conservative. A rail 0.5 mm over its nominal thickness takes the inner leaf
-to about 17 MPa, over the limit at t = 3 but not at t = 2.5 (about 14 MPa).
-That's the reason to sweep `inner_pre` and `t` on coupons against the real
-rail.
+L is the vertical lever arm from the leaf's root (the end of the corner
+bend, or the top of the J) to its contact point. At the defaults that gives
+12.5 MPa for the inner leaf and 12.4 MPa for the lip (from the prototype).
+The bends add compliance on top of this, so the cantilever is conservative.
+A rail 0.5 mm over its nominal thickness raises the inner leaf's δ by half,
+which takes it over the limit at both t = 3 (about 19 MPa) and t = 2.5
+(about 16 MPa). That's the reason to sweep `inner_pre` and `t` on coupons
+against the real rail. The lip's stress is partly self-limiting: a larger
+`lip_pre` also lengthens its solved straight, and so its arm.
 
 ## Coupons
 
@@ -124,8 +126,10 @@ Every coupon carries its ID engraved 0.4 mm into the hanger's rail-side
 face, which is hidden in use and wide enough, at a 10 mm length, for 5 mm
 text. Full parts carry theirs in the same place.
 
-Justfile sweeps (the values are editable at the top of the justfile, as in
-`curtain-hanger/`):
+The sweeps deliberately bracket the creep ceiling, so the coupon recipes
+pass `--creep_limit 30`, in the same way `curtain-hanger/` passes
+`--min_safety 0` to its coupons. Justfile sweeps (the values are editable
+at the top of the justfile, as in `curtain-hanger/`):
 
 - `clamp-coupons`: `inner_pre` ∈ {0.5, 1.0, 1.5} × `t` ∈ {2.5, 3.0},
   labelled e.g. `ip1.0 t3`
@@ -140,10 +144,14 @@ parts.
 
 A new `bedside-holder/` directory, following `beam-clip/`:
 
-- `holder.py`: params, validation, centreline, profile, part, and a CLI
-  that writes STL
+- `path.py`: a pure-Python turtle of lines and tangent arcs, which samples
+  the centreline or either face of the strip
+- `test_path.py`
+- `holder.py`: params, spring solves, validation, centreline, profile,
+  part, and a CLI that writes STL, STEP or SVG
 - `test_holder.py`
-- `conftest.py`
+
+No `conftest.py` is needed, since nothing is shared between the test files.
 - `justfile`: `laptop`, `phone`, the coupon sweeps, `render` (SVG
   profile), `test`, `clean`
 - `pixi.toml`
