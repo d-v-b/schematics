@@ -1,9 +1,11 @@
 """The holder is one bent strip, extruded along the rail. Across devices,
-sections, strip thicknesses, drops and leans it builds one valid solid of
-the expected extents; its inner-leaf contact, pocket floor, seat, lip
-contact and leaning hanger sit where the parameters put them; the full part's
-pad touches the rail face at pad_y; it clears the mattress and stays under
-the creep ceiling; and a label engraves it.
+strip thicknesses, drops, leans and lengths (a 1 mm coupon slice or a real
+part) it builds one valid solid of the expected extents; its inner-leaf
+contact, pocket floor, seat, lip contact and leaning hanger sit where the
+parameters put them; the pad touches the rail face at pad_y and blends into
+the hanger without touching its device-side face; it clears the mattress
+and stays under the creep ceiling; and a label engraves it where it fits:
+the top face of a thin slice, the hanger's rail-side face of a real part.
 
 The pocket is checked in its own frame (HolderParams.world): u across the
 slot away from the hanger, v up the hanger, from the J's centre.
@@ -21,84 +23,84 @@ from holder import HolderParams, holder, pad_outline
 TOL = 1e-3
 
 
-@pytest.mark.parametrize("section", ["full", "clamp", "pocket"])
+@pytest.mark.parametrize("length", [1.0, 10.0])
 @pytest.mark.parametrize("device_t,t,drop,lean", [
     (11.5, 3.0, 200.0, 7.0),   # the laptop, as specified
     (9.3, 3.0, 200.0, 7.0),    # the phone
     (11.5, 2.5, 160.0, 5.0),   # thinner strip, shallowest pocket, less lean
     (9.3, 2.5, 180.0, 9.0),    # more lean
 ])
-def test_holder(section, device_t, t, drop, lean):
-    p = HolderParams(device_t=device_t, t=t, drop=drop, lean=lean, section=section, length=10)
+def test_holder(length, device_t, t, drop, lean):
+    p = HolderParams(device_t=device_t, t=t, drop=drop, lean=lean, length=length)
     p.validate()
     body = holder(p)
     assert body.is_valid() and len(body.solids()) == 1
 
     bb = body.bounding_box()
     assert (bb.min.Z, bb.max.Z) == pytest.approx((0, p.length), abs=TOL)
-    a = math.radians(lean)
-    top = p.top_y if section != "pocket" else p.hanger_end[1] + p.stub * math.cos(a) + t / 2
-    bottom = -drop - p.gap / 2 - t if section != "clamp" else -p.stub - t / 2
-    assert (bb.min.Y, bb.max.Y) == pytest.approx((bottom, top), abs=TOL)
+    assert (bb.min.Y, bb.max.Y) == pytest.approx((-drop - p.gap / 2 - t, p.top_y), abs=TOL)
 
     z = p.length / 2
 
     def inside(q):
         return body.is_inside(Vector(q[0], q[1], z))
 
-    if section != "pocket":
-        # relaxed, the inner leaf reaches inner_pre into the rail at one point
-        x, y = p.inner_contact
-        assert x == pytest.approx(-p.rail_t + p.inner_pre, abs=1e-6)
-        assert inside((x - 0.05, y)) and not inside((x + 0.05, y))
-        assert p.protrusion <= p.mattress_clear
-        assert p.inner_stress <= p.creep_limit
-    if section != "clamp":
-        back = -p.gap / 2  # the hanger's device-side face, in u
-        # the J's centre, where the device seats, is drop below the rail top
-        assert p.world(0, 0)[1] == pytest.approx(-drop, abs=1e-9)
-        # the hanger leans: 30 up it, its device-side face is still at u = back
-        assert inside(p.world(back - 0.05, 30)) and not inside(p.world(back + 0.05, 30))
-        # the J's inside bottom is gap/2 below the seat
-        assert inside(p.world(0, -p.gap / 2 - 0.05)) and not inside(p.world(0, -p.gap / 2 + 0.05))
-        # the seat: just above it at the hanger face is open slot, and 1 mm
-        # below it the J wall has already curved in under the device's rear corner
-        assert not inside(p.world(back + 0.05, 0.05)) and inside(p.world(back + 0.05, -1.0))
-        # relaxed, the lip reaches lip_pre into the device at one point
-        u, v = p.local(p.lip_contact)
-        assert u == pytest.approx(back + device_t - p.lip_pre, abs=1e-6)
-        assert inside(p.world(u + 0.05, v)) and not inside(p.world(u - 0.05, v))
-        assert p.lip_stress <= p.creep_limit
-    if section == "full":
-        # the pad's round nose touches the rail face at pad_y, and only there
-        assert inside((0.05, -p.pad_y)) and not inside((-0.05, -p.pad_y))
-        assert not inside((0.05, -p.pad_y + p.pad_r + 0.5)) and not inside((0.05, -p.pad_y - p.pad_r - 0.5))
-        # the pad stays on the rail side: the hanger's device-side face is flat
-        # across the pad's whole blend
-        up, dn = (p.local(q)[1] for q in p.pad_blend)
-        for v in (up, (up + dn) / 2, dn):
-            assert inside(p.world(back - 0.05, v)) and not inside(p.world(back + 0.05, v))
-        # and it blends in smoothly: fillet, nose and fillet meet each other and
-        # the hanger's rail-side face without a corner
-        fillet_up, nose, fillet_dn = pad_outline(p)
-        down = Vector(*p.hanger_dir, 0)
-        for a_, b_ in ((down, fillet_up.tangent_at(0)), (fillet_up.tangent_at(1), nose.tangent_at(0)),
-                       (nose.tangent_at(1), fillet_dn.tangent_at(0)), (fillet_dn.tangent_at(1), down)):
-            assert a_.cross(b_).length == pytest.approx(0, abs=1e-6) and a_.dot(b_) > 0
+    # relaxed, the inner leaf reaches inner_pre into the rail at one point
+    x, y = p.inner_contact
+    assert x == pytest.approx(-p.rail_t + p.inner_pre, abs=1e-6)
+    assert inside((x - 0.05, y)) and not inside((x + 0.05, y))
+    assert p.protrusion <= p.mattress_clear
+    assert p.inner_stress <= p.creep_limit
+    back = -p.gap / 2  # the hanger's device-side face, in u
+    # the J's centre, where the device seats, is drop below the rail top
+    assert p.world(0, 0)[1] == pytest.approx(-drop, abs=1e-9)
+    # the hanger leans: 30 up it, its device-side face is still at u = back
+    assert inside(p.world(back - 0.05, 30)) and not inside(p.world(back + 0.05, 30))
+    # the J's inside bottom is gap/2 below the seat
+    assert inside(p.world(0, -p.gap / 2 - 0.05)) and not inside(p.world(0, -p.gap / 2 + 0.05))
+    # the seat: just above it at the hanger face is open slot, and 1 mm
+    # below it the J wall has already curved in under the device's rear corner
+    assert not inside(p.world(back + 0.05, 0.05)) and inside(p.world(back + 0.05, -1.0))
+    # relaxed, the lip reaches lip_pre into the device at one point
+    u, v = p.local(p.lip_contact)
+    assert u == pytest.approx(back + device_t - p.lip_pre, abs=1e-6)
+    assert inside(p.world(u + 0.05, v)) and not inside(p.world(u - 0.05, v))
+    assert p.lip_stress <= p.creep_limit
+    # the pad's round nose touches the rail face at pad_y, and only there
+    assert inside((0.05, -p.pad_y)) and not inside((-0.05, -p.pad_y))
+    assert not inside((0.05, -p.pad_y + p.pad_r + 0.5)) and not inside((0.05, -p.pad_y - p.pad_r - 0.5))
+    # the pad stays on the rail side: the hanger's device-side face is flat
+    # across the pad's whole blend
+    up, dn = (p.local(q)[1] for q in p.pad_blend)
+    for v in (up, (up + dn) / 2, dn):
+        assert inside(p.world(back - 0.05, v)) and not inside(p.world(back + 0.05, v))
+    # and it blends in smoothly: fillet, nose and fillet meet each other and
+    # the hanger's rail-side face without a corner
+    fillet_up, nose, fillet_dn = pad_outline(p)
+    down = Vector(*p.hanger_dir, 0)
+    for a_, b_ in ((down, fillet_up.tangent_at(0)), (fillet_up.tangent_at(1), nose.tangent_at(0)),
+                   (nose.tangent_at(1), fillet_dn.tangent_at(0)), (fillet_dn.tangent_at(1), down)):
+        assert a_.cross(b_).length == pytest.approx(0, abs=1e-6) and a_.dot(b_) > 0
 
-    labelled = holder(HolderParams(device_t=device_t, t=t, drop=drop, lean=lean, section=section, length=10,
-                                   label="ip1.0 t3"))
+    labelled = holder(HolderParams(device_t=device_t, t=t, drop=drop, lean=lean, length=length,
+                                   label="ip1.0 lp0.75 t3"))
     assert labelled.is_valid() and labelled.volume < body.volume
+    cut = body - labelled
+    if length < p.label_size + 1:
+        # a thin slice carries its ID in its top face, within the hanger's width
+        assert cut.bounding_box().min.Z == pytest.approx(length - p.label_depth, abs=TOL)
+        (fx, fy), (nx, ny) = p.hanger_start, p.hanger_n
+        assert max(abs((v.X - fx) * nx + (v.Y - fy) * ny) for v in cut.vertices()) < t / 2
+    else:
+        # a real part carries it in the hanger's rail-side face, hidden in use
+        (fx, fy), (nx, ny) = p.hanger_start, p.hanger_n
+        depth = [(v.X - fx) * nx + (v.Y - fy) * ny + t / 2 for v in cut.vertices()]
+        assert min(depth) == pytest.approx(0, abs=TOL) and max(depth) == pytest.approx(p.label_depth, abs=TOL)
 
 
 def test_non_positive():
     with pytest.raises(ValueError, match="must be positive: t, bend_ri"):
         HolderParams(t=0, bend_ri=-1).validate()
-
-
-def test_section():
-    with pytest.raises(ValueError, match="section must be one of"):
-        HolderParams(section="middle").validate()
 
 
 def test_arc_too_tight():

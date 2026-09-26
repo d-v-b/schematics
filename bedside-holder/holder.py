@@ -26,7 +26,7 @@ profile lies in XY and is extruded ``length`` up Z, which is print Z: it
 prints flat on the bed.
 
 Usage:
-    python holder.py -o holder.stl [--device_t 11.5] [--length 50] [--section full]
+    python holder.py -o holder.stl [--device_t 11.5] [--length 50]
 """
 
 from __future__ import annotations
@@ -56,7 +56,6 @@ from build123d import (
 
 from path import Pt, Seg, Turtle, sample
 
-SECTIONS = ("full", "clamp", "pocket")
 UP, DOWN = math.pi / 2, -math.pi / 2
 
 
@@ -85,9 +84,7 @@ class HolderParams:
     lip_flare_r: float = 8.0
     lip_flare_deg: float = 40.0
     lip_tip: float = 4.0          # straight past the lip's flare
-    stub: float = 40.0            # hanger kept on a clamp or pocket coupon
-    section: str = "full"         # full | clamp | pocket
-    length: float = 50.0          # extrusion along the rail (print Z)
+    length: float = 50.0          # extrusion along the rail (print Z); 1 for a coupon slice
     label: str = ""
     label_depth: float = 0.4
     label_size: float = 5.0
@@ -302,19 +299,19 @@ class HolderParams:
     def validate(self) -> None:
         dims = ("rail_t", "mattress_clear", "device_t", "slot_clearance", "drop", "t", "bend_ri", "inner_len",
                 "inner_pre", "inner_flare_r", "inner_flare_deg", "lip_base", "lip_r", "lip_lean", "lip_pre",
-                "lip_flare_r", "lip_flare_deg", "lip_tip", "stub", "length", "label_depth", "label_size",
+                "lip_flare_r", "lip_flare_deg", "lip_tip", "length", "label_depth", "label_size",
                 "modulus", "creep_limit", "max_size", "lean", "rail_h", "pad_y", "pad_r", "pad_fillet")
         bad = [d for d in dims if getattr(self, d) <= 0]
         if bad:
             raise ValueError(f"must be positive: {', '.join(bad)}")
-        if self.section not in SECTIONS:
-            raise ValueError(f"section must be one of {SECTIONS}, not {self.section!r}")
         if min(self.inner_flare_r, self.lip_r, self.lip_flare_r) <= self.t / 2:
             raise ValueError("every arc's radius must exceed t / 2, or the strip folds over itself on the inside")
         if self.lip_flare_deg <= self.lip_lean:
             raise ValueError("lip_flare_deg must exceed lip_lean, or the lip never turns back from the device")
-        if self.label_depth >= self.t:
-            raise ValueError(f"label_depth {self.label_depth:g} must be less than t {self.t:g}")
+        if self.label_depth >= min(self.t, self.length):
+            raise ValueError(
+                f"label_depth {self.label_depth:g} must be less than t {self.t:g} and length {self.length:g}"
+            )
         if math.isnan(self.inner_lean):
             raise ValueError(
                 f"the inner leaf cannot lean in {self.inner_pre:g} within 45 deg: lengthen inner_len or cut inner_pre"
@@ -365,7 +362,7 @@ class HolderParams:
 
     def report(self) -> str:
         return (
-            f"{self.section} for a {self.device_t:g} device on a {self.rail_t:g} rail, seated {self.drop:g} down, "
+            f"for a {self.device_t:g} device on a {self.rail_t:g} rail, seated {self.drop:g} down, "
             f"leaning {self.lean:g} deg on a {self.pad_thick:.1f} pad, "
             f"{self.t:g} strip x {self.length:g}: inner leaf leans {math.degrees(self.inner_lean):.1f} deg, "
             f"{self.inner_stress:.1f} MPa, stands {self.protrusion:.2f} off the rail; lip {self.lip_stress:.1f} MPa; "
@@ -374,21 +371,13 @@ class HolderParams:
 
 
 def centreline(p: HolderParams) -> list[Seg]:
-    """The strip's centreline for p.section, from the inner leaf's tip (or,
-    for a pocket coupon, the hanger stub's top) to the lip's tip."""
-    leaf = p._leaf(p.inner_lean) if p.section != "pocket" else []
-    if leaf:
-        tw = Turtle(leaf[-1].end, leaf[-1].h1 + math.pi).replay_reversed(leaf)
-        tw.arc(p.rc, -math.pi / 2)  # the rest of the inner corner bend, to heading +x
-        tw.line(p.rail_t - 2 * p._k)
-        tw.arc(p.rc, -(math.pi / 2 - p._a))  # stops lean short of vertical
-    else:
-        (x, y), (dx, dy) = p.hanger_end, p.hanger_dir
-        tw = Turtle((x - p.stub * dx, y - p.stub * dy), DOWN + p._a)
-    if p.section == "clamp":
-        tw.line((tw.pos[1] + p.stub) / math.cos(p._a))  # to y = -stub
-        return tw.segs
-    tw.line(p.hanger_len if p.section == "full" else p.stub)
+    """The strip's centreline, from the inner leaf's tip to the lip's tip."""
+    leaf = p._leaf(p.inner_lean)
+    tw = Turtle(leaf[-1].end, leaf[-1].h1 + math.pi).replay_reversed(leaf)
+    tw.arc(p.rc, -math.pi / 2)  # the rest of the inner corner bend, to heading +x
+    tw.line(p.rail_t - 2 * p._k)
+    tw.arc(p.rc, -(math.pi / 2 - p._a))  # stops lean short of vertical
+    tw.line(p.hanger_len)
     tw.arc(p.j_r, math.pi)
     return tw.segs + p._lip(p.lip_straight)
 
@@ -401,15 +390,13 @@ def _wire(segs: list[Seg]) -> Wire:
 def profile(p: HolderParams) -> Sketch:
     p.validate()
     wire = _wire(centreline(p))
-    sketch = Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
-    if p.section == "full":
-        # close the pad's outline inside the strip, along its centreline
-        (_, up, _), (_, down, _) = p._pad_fillet(-1), p._pad_fillet(1)
-        nx, ny = p.hanger_n
-        up_in, down_in = (up[0] + p.t / 2 * nx, up[1] + p.t / 2 * ny), (down[0] + p.t / 2 * nx, down[1] + p.t / 2 * ny)
-        edges = pad_outline(p) + [Line(down, down_in), Line(down_in, up_in), Line(up_in, up)]
-        sketch += Sketch([make_face(Wire(edges))])
-    return sketch
+    strip = Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
+    # close the pad's outline inside the strip, along its centreline
+    (_, up, _), (_, down, _) = p._pad_fillet(-1), p._pad_fillet(1)
+    nx, ny = p.hanger_n
+    up_in, down_in = (up[0] + p.t / 2 * nx, up[1] + p.t / 2 * ny), (down[0] + p.t / 2 * nx, down[1] + p.t / 2 * ny)
+    edges = pad_outline(p) + [Line(down, down_in), Line(down_in, up_in), Line(up_in, up)]
+    return strip + Sketch([make_face(Wire(edges))])
 
 
 def pad_outline(p: HolderParams) -> list[Edge]:
@@ -434,26 +421,24 @@ def pad_outline(p: HolderParams) -> list[Edge]:
     ]
 
 
-def label_y(p: HolderParams) -> float:
-    """Where along the hanger's rail-side face the ID is centred: midway
-    down the stub on a coupon, and between the rail top and the pad on the
-    full part."""
-    top = p.hanger_start[1]
-    if p.section == "clamp":
-        return (top - p.stub) / 2
-    if p.section == "pocket":
-        return p.hanger_end[1] + p.stub / 2 * math.cos(p._a)
-    return (top + p.pad_blend[0][1]) / 2
+def label_plane(p: HolderParams) -> tuple[Plane, float]:
+    """Where the ID goes, and its text size, centred on the hanger between
+    the rail top and the pad. A real part carries it in the hanger's
+    rail-side face, hidden in use, reading down the hanger. A slice too thin
+    for that (a coupon) carries it in its top face, reading up the hanger,
+    small enough to fit the strip's width."""
+    (x, y), (dx, dy), (nx, ny) = p.hanger_at((p.hanger_start[1] + p.pad_blend[0][1]) / 2), p.hanger_dir, p.hanger_n
+    if p.length < p.label_size + 1:
+        return Plane(origin=(x, y, p.length), x_dir=(-dx, -dy, 0), z_dir=(0, 0, 1)), p.t - 1
+    origin = (x - p.t / 2 * nx, y - p.t / 2 * ny, p.length / 2)
+    return Plane(origin=origin, x_dir=(dx, dy, 0), z_dir=(-nx, -ny, 0)), p.label_size
 
 
 def holder(p: HolderParams) -> Part:
     body = extrude(profile(p), amount=p.length)
     if p.label:
-        # on the hanger's face toward the rail, reading down the hanger
-        (x, y), (dx, dy), (nx, ny) = p.hanger_at(label_y(p)), p.hanger_dir, p.hanger_n
-        origin = (x - p.t / 2 * nx, y - p.t / 2 * ny, p.length / 2)
-        face = Plane(origin=origin, x_dir=(dx, dy, 0), z_dir=(-nx, -ny, 0))
-        text = face * Text(p.label, font_size=p.label_size, font_style=FontStyle.BOLD)
+        plane, size = label_plane(p)
+        text = plane * Text(p.label, font_size=size, font_style=FontStyle.BOLD)
         body -= extrude(text, amount=-p.label_depth)
     return body
 
@@ -470,8 +455,7 @@ def _svg(p: HolderParams, out: Path) -> None:
     svg.add_layer("rail", line_color=(150, 150, 150), line_type=LineType.ISO_DASH, line_weight=0.2)
     svg.add_layer("device", line_color=(190, 190, 190), line_type=LineType.ISO_DOT, line_weight=0.2)
     svg.add_shape(rail, layer="rail")
-    if p.section != "clamp":
-        svg.add_shape(dev, layer="device")
+    svg.add_shape(dev, layer="device")
     svg.add_shape(profile(p))
     svg.write(str(out))
 

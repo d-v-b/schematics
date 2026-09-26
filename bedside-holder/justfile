@@ -16,14 +16,13 @@ laptop_t := "11.5"    # MacBook Air 15"
 phone_t := "9.3"      # iPhone 4, no case
 args := "--t " + t + " --inner_pre " + inner_pre + " --lip_pre " + lip_pre + " --drop " + drop + " --lean " + lean
 
-# --- Coupons: the profile extruded 10 mm, cropped to the clamp or the pocket.
-# Short fit tests, so the creep ceiling is relaxed: the sweep deliberately
-# brackets it.
-coupon_length := "10"
+# --- Coupons: 1 mm slices of the full part, ID in the top face. Each one
+# tests the clamp on the rail and the pocket with the device at once. Short
+# fit tests, so the creep ceiling is relaxed: the sweep deliberately brackets it.
+coupon_length := "1"
 coupon_ts := "2.5 3"
-coupon_inner_pres := "0.5 1.0 1.5"
-coupon_lip_pres := "0.5 0.75 1.0"
-coupon_args := "--length " + coupon_length + " --creep_limit 30"
+coupon_pres := "0.5:0.5 1.0:0.75 1.5:1.0"   # inner_pre:lip_pre pairs, loosest to tightest
+coupon_args := "--length " + coupon_length + " --creep_limit 30 --drop " + drop + " --lean " + lean
 
 default:
     @just --list
@@ -33,32 +32,22 @@ default:
 render outfile *args:
     {{python}} holder.py -o "$@"
 
-# Clamp coupons over inner_pre x t: push each onto the rail
-clamp-coupons:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for t in {{coupon_ts}}; do
-        for ip in {{coupon_inner_pres}}; do
-            just render "{{out}}/clamp_coupon_t${t}_ip${ip}.stl" {{coupon_args}} --section clamp \
-                --t "$t" --inner_pre "$ip" --label "ip$ip t$t"
-        done
-    done
-
-# Pocket coupons for one device thickness over lip_pre x t: slide the device in and out
+# Coupons for one device over (inner_pre, lip_pre) x t: push each onto the rail, then slide the device in
 [positional-arguments]
-pocket-coupons device_t=laptop_t:
+coupons device_t=laptop_t:
     #!/usr/bin/env bash
     set -euo pipefail
     for t in {{coupon_ts}}; do
-        for lp in {{coupon_lip_pres}}; do
-            just render "{{out}}/pocket_coupon_d{{device_t}}_t${t}_lp${lp}.stl" {{coupon_args}} --section pocket \
-                --device_t {{device_t}} --t "$t" --lip_pre "$lp" --label "lp$lp t$t"
+        for pair in {{coupon_pres}}; do
+            ip="${pair%%:*}"; lp="${pair##*:}"
+            just render "{{out}}/coupon_d{{device_t}}_t${t}_ip${ip}_lp${lp}.stl" {{coupon_args}} \
+                --device_t {{device_t}} --t "$t" --inner_pre "$ip" --lip_pre "$lp" --label "ip$ip lp$lp t$t"
         done
     done
 
-# Pocket coupons for the phone
+# Coupons for the phone
 phone-coupons:
-    just pocket-coupons {{phone_t}}
+    just coupons {{phone_t}}
 
 # One laptop clip (print two, ~200 mm apart under the laptop)
 laptop:

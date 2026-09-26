@@ -53,20 +53,20 @@ That's what the coupons are for.
 
 ## Coupons
 
-The part is one profile, so a coupon is that profile extruded 10 mm,
-cropped to the part you're testing, with its parameters engraved on the
-hanger's rail side:
+The part is one profile, so a coupon is a 1 mm slice of the whole thing:
+clamp, lean, pad and pocket, exactly where they'll be. Each one tests the
+fit on the rail and the fit of the device at once. Its parameters are
+engraved in its top face, along the hanger:
 
 ```bash
-pixi run just clamp-coupons    # inner_pre 0.5/1.0/1.5 x t 2.5/3: push onto the rail
-pixi run just pocket-coupons   # lip_pre 0.5/0.75/1.0 x t 2.5/3 for the laptop
-pixi run just phone-coupons    # the same for the phone
+pixi run just coupons         # (inner_pre, lip_pre) = (0.5, 0.5) / (1.0, 0.75) / (1.5, 1.0) x t 2.5/3, laptop
+pixi run just phone-coupons   # the same for the phone
 ```
 
 Coupons relax the creep ceiling to 30 MPa, because the sweep deliberately
-brackets it. Pick the loosest clamp coupon that doesn't slide on the rail,
-and the loosest pocket coupon that holds the device without rattling. Set
-those values at the top of the `justfile`, then:
+brackets it. Push each onto the rail and slide the device in. Pick the
+loosest one that doesn't slide on the rail and holds the device without
+rattling. Set those values at the top of the `justfile`, then:
 
 ```bash
 pixi run just laptop   # print two

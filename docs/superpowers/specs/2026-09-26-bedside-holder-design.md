@@ -100,8 +100,7 @@ Parts, all from this one profile:
 A frozen `HolderParams` dataclass with the defaults above, plus `rail_t`
 23.0, `mattress_clear` 5.0, `label` "", `label_depth` 0.4, `label_size`
 5.0, `modulus` 2000 MPa and `creep_limit` 15 MPa (PETG, the same values as
-the other schematics). It also has `section` (`"full"`, `"clamp"` or
-`"pocket"`), `stub` 40 (the hanger kept on a coupon), `max_size` 250,
+the other schematics). It also has `max_size` 250,
 `lean` 7°, `rail_h` 160, `pad_y` 140, `pad_r` 6 and `pad_fillet` 15.
 
 ## Validation
@@ -142,28 +141,28 @@ against the real rail. The lip's stress is partly self-limiting: a larger
 
 ## Coupons
 
-Because the part is 2.5-D, a coupon is the same profile extruded only
-10 mm, optionally cropped by `section`:
+Because the part is 2.5-D, a coupon is a 1 mm slice of the full profile
+(`--length 1`). Each one tests the clamp on the rail and the pocket with
+the device at once, at their real positions, with the lean and the pad.
+(The first version cropped 10 mm coupons to the clamp or the pocket by a
+`section` parameter; slices of the whole part replaced them.)
 
-- `"clamp"`: centreline items 1–5 plus 40 mm of hanger. Tests the push-on
-  fit and hold on the real rail.
-- `"pocket"`: 40 mm of hanger plus items 7–9. Tests inserting and removing
-  the device, and whether the lip holds it back against the hanger.
-
-Every coupon carries its ID engraved 0.4 mm into the hanger's rail-side
-face, which is hidden in use and wide enough, at a 10 mm length, for 5 mm
-text. Full parts carry theirs in the same place.
+A slice is too thin for text on a side face, so it carries its ID
+engraved 0.4 mm into its top face (z = `length`), centred on the hanger
+between the rail top and the pad, reading up the hanger, in text `t` − 1
+tall so it fits the strip's width (as `curtain-hanger/` does for short
+coupons). A full part, long enough for `label_size` text, carries its ID in
+the hanger's rail-side face instead, hidden in use.
 
 The sweeps deliberately bracket the creep ceiling, so the coupon recipes
 pass `--creep_limit 30`, in the same way `curtain-hanger/` passes
 `--min_safety 0` to its coupons. Justfile sweeps (the values are editable
 at the top of the justfile, as in `curtain-hanger/`):
 
-- `clamp-coupons`: `inner_pre` ∈ {0.5, 1.0, 1.5} × `t` ∈ {2.5, 3.0},
-  labelled e.g. `ip1.0 t3`
-- `pocket-coupons`: `lip_pre` ∈ {0.5, 0.75, 1.0} × `t` ∈ {2.5, 3.0}, for the
-  laptop's `device_t`, labelled e.g. `lp0.75 t3`; `phone-coupons` does the
-  same at 9.3
+- `coupons`: (`inner_pre`, `lip_pre`) ∈ {(0.5, 0.5), (1.0, 0.75),
+  (1.5, 1.0)} × `t` ∈ {2.5, 3.0} for the laptop's `device_t`, labelled e.g.
+  `ip1.0 lp0.75 t3`; `phone-coupons` does the same at 9.3. Twelve slices in
+  all.
 
 Once the coupons settle the values, `laptop` and `phone` render the full
 parts.
@@ -188,7 +187,7 @@ No `conftest.py` is needed, since nothing is shared between the test files.
 ## Testing
 
 Following the repo's rule, there is one test that builds the part across a
-grid of reasonable parameters: both devices, each `section`, `t` 2.5 and
+grid of reasonable parameters: both devices, a 1 mm slice and a 10 mm part, `t` 2.5 and
 3.0, a few `drop` values, and leans of 5°, 7° and 9°. The pocket is
 checked in its own frame, from the J's centre with u across the slot and v
 up the hanger. For each, it checks that:
@@ -204,6 +203,7 @@ up the hanger. For each, it checks that:
 - the inner leaf's knee overlaps the rail by `inner_pre`
 - the mattress-side protrusion is ≤ `mattress_clear`
 - the modelled stresses are below `creep_limit`
-- a labelled coupon has less volume than the same coupon unlabelled
+- a label removes material, from the top face within the strip's width on
+  a slice, and from the hanger's rail-side face on a longer part
 
 Then there is one test per `ValueError` case listed under Validation.
