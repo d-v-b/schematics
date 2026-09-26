@@ -70,12 +70,16 @@ side:
 9. **Lip flare:** an arc of R 8 turning 40° outward, then a 4 mm straight,
    as a lead-in.
 
-**Pad.** A solid stadium of radius `pad_r` (default 6) runs from the
-hanger's centreline back to the rail's outer face at y = −`pad_y` (default
-140, which leaves 14 mm to the bottom of the 160 mm rail). Its round nose
-touches the rail face along one line. At 7° it is about 18 mm thick. It
-isn't part of the strip: it is solid so the lean doesn't sag under the
-laptop.
+**Pad.** A solid buttress on the hanger's rail side holds it off the rail
+face at y = −`pad_y` (default 140, which leaves 14 mm to the bottom of the
+160 mm rail). Its outline is a nose of radius `pad_r` (default 6) that
+touches the rail face along one line, joined to the hanger's rail-side face
+above and below by concave fillets of radius `pad_fillet` (default 15),
+tangent at every joint. Nothing crosses the hanger's device-side face,
+which stays flat for the device to lie on. At 7° the pad spans about
+18 mm. It isn't part of the strip: it is solid so the lean doesn't sag
+under the laptop. (The first version was a stadium centred on the hanger's
+centreline; it poked 4.5 mm through the device-side face.)
 
 The device's back lies on the hanger's outer surface, and its foot sits in
 the J. The lip's preload pushes the device's lower back onto the hanger,
@@ -98,7 +102,7 @@ A frozen `HolderParams` dataclass with the defaults above, plus `rail_t`
 5.0, `modulus` 2000 MPa and `creep_limit` 15 MPa (PETG, the same values as
 the other schematics). It also has `section` (`"full"`, `"clamp"` or
 `"pocket"`), `stub` 40 (the hanger kept on a coupon), `max_size` 250,
-`lean` 7°, `rail_h` 160, `pad_y` 140 and `pad_r` 6.
+`lean` 7°, `rail_h` 160, `pad_y` 140, `pad_r` 6 and `pad_fillet` 15.
 
 ## Validation
 
@@ -117,8 +121,9 @@ the other schematics). It also has `section` (`"full"`, `"clamp"` or
 - `label_depth` ≥ `t`
 - a pad that hangs off the bottom of the rail (`pad_y` + `pad_r` >
   `rail_h`)
-- a pad that misses the hanger (above its start, or below the J)
+- a pad that misses the hanger (its blends above its start, or below the J)
 - a lean too small to hold the hanger off the rail at the pad
+- a `pad_fillet` too small to reach from the nose to the hanger
 
 **Stress model.** Each spring is treated as a cantilever of the strip,
 deflected at its knee by its preload δ:
@@ -193,7 +198,8 @@ up the hanger. For each, it checks that:
 - the device's seat, the J's centre, is at y = −`drop`
 - the hanger's device-side face lies along the lean
 - on the full part, the pad touches the rail face at y = −`pad_y`, and only
-  there
+  there; the hanger's device-side face is clear across the pad's blend; and
+  the pad's outline is tangent at all four joints
 - the relaxed slot gap at the lip knee equals `device_t` − `lip_pre`
 - the inner leaf's knee overlaps the rail by `inner_pre`
 - the mattress-side protrusion is ≤ `mattress_clear`

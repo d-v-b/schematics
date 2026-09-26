@@ -17,10 +17,13 @@ tangent arcs, thickened evenly either side. From the bed side:
 - the **hanger**, leaning 7° down and away from the rail's outer face. The
   device lies on it, so the device's top tips toward the bed: the laptop's
   top ends up 35 mm above the rail top, right over the rail's outer face
-- a solid **pad** with a round nose, 140 mm below the rail top and 20 mm
-  clear of the rail's bottom edge, that holds the hanger off the rail
-  (18 mm thick at 7°). The device's weight presses the hanger onto the pad
-  and the clamp, so the lean is set by solid material, not by a spring
+- a solid **pad**, 140 mm below the rail top and 20 mm clear of the rail's
+  bottom edge, that holds the hanger off the rail (18 mm at 7°). It's a
+  buttress on the hanger's rail side only: an R6 nose touches the rail
+  face, and R15 concave fillets sweep it tangentially into the hanger above
+  and below, so the device-side face stays flat. The device's weight
+  presses the hanger onto the pad and the clamp, so the lean is set by
+  solid material, not by a spring
 - a 180° **J**, in which the device's foot seats 200 mm below the rail top
 - the **spring lip**, which leans in 6° to overlap the device by 0.75 mm,
   pressing its lower back onto the hanger, then flares out as a lead-in

@@ -16,7 +16,7 @@ import math
 import pytest
 from build123d import Vector
 
-from holder import HolderParams, holder
+from holder import HolderParams, holder, pad_outline
 
 TOL = 1e-3
 
@@ -73,6 +73,18 @@ def test_holder(section, device_t, t, drop, lean):
         # the pad's round nose touches the rail face at pad_y, and only there
         assert inside((0.05, -p.pad_y)) and not inside((-0.05, -p.pad_y))
         assert not inside((0.05, -p.pad_y + p.pad_r + 0.5)) and not inside((0.05, -p.pad_y - p.pad_r - 0.5))
+        # the pad stays on the rail side: the hanger's device-side face is flat
+        # across the pad's whole blend
+        up, dn = (p.local(q)[1] for q in p.pad_blend)
+        for v in (up, (up + dn) / 2, dn):
+            assert inside(p.world(back - 0.05, v)) and not inside(p.world(back + 0.05, v))
+        # and it blends in smoothly: fillet, nose and fillet meet each other and
+        # the hanger's rail-side face without a corner
+        fillet_up, nose, fillet_dn = pad_outline(p)
+        down = Vector(*p.hanger_dir, 0)
+        for a_, b_ in ((down, fillet_up.tangent_at(0)), (fillet_up.tangent_at(1), nose.tangent_at(0)),
+                       (nose.tangent_at(1), fillet_dn.tangent_at(0)), (fillet_dn.tangent_at(1), down)):
+            assert a_.cross(b_).length == pytest.approx(0, abs=1e-6) and a_.dot(b_) > 0
 
     labelled = holder(HolderParams(device_t=device_t, t=t, drop=drop, lean=lean, section=section, length=10,
                                    label="ip1.0 t3"))
@@ -142,6 +154,11 @@ def test_pad_off_the_rail():
 def test_pad_off_the_hanger():
     with pytest.raises(ValueError, match="pad must meet the hanger between the rail top and the pocket"):
         HolderParams(drop=140.0).validate()
+
+
+def test_pad_fillet_too_small():
+    with pytest.raises(ValueError, match="pad_fillet 2 is too small to reach the hanger"):
+        HolderParams(pad_fillet=2.0).validate()
 
 
 def test_lean_too_small():

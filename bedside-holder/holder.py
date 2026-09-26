@@ -8,9 +8,12 @@ a flared tip, the sprung inner leaf, a bend over the rail's inner top
 corner, a straight across the top, a bend over the outer top corner that
 stops ``lean`` short of vertical, the hanger leaning down and away from the
 rail's outer face, a 180 degree J in which the device's foot seats, and a
-spring lip that leans in and flares out again as a lead-in. A solid pad,
-round-nosed, holds the hanger off the rail face ``pad_y`` below its top, so
-the device lying on the hanger tips its top toward the bed.
+spring lip that leans in and flares out again as a lead-in. A solid pad
+holds the hanger off the rail face ``pad_y`` below its top, so the device
+lying on the hanger tips its top toward the bed. The pad is a buttress on
+the hanger's rail side only: a round nose on the rail face, swept into the
+hanger's rail-side face by a concave fillet above and below, tangent all
+the way, so the hanger's device-side face stays flat.
 
 Relaxed, the inner leaf overlaps the rail by ``inner_pre`` and the lip
 overlaps the device by ``lip_pre``; both are cantilevers of the strip that
@@ -35,6 +38,7 @@ from functools import cached_property
 from pathlib import Path
 
 from build123d import (
+    Edge,
     FontStyle,
     Kind,
     Line,
@@ -66,7 +70,8 @@ class HolderParams:
     lean: float = 7.0             # the hanger's lean off the rail face, deg: the device's top tips toward the bed
     rail_h: float = 160.0         # the bed rail's height
     pad_y: float = 140.0          # the pad's centre, below the rail's top edge
-    pad_r: float = 6.0            # the pad's half-height, and its nose's radius on the rail face
+    pad_r: float = 6.0            # radius of the pad's nose on the rail face
+    pad_fillet: float = 15.0      # radius of the concave sweeps from the nose into the hanger
     t: float = 3.0                # strip thickness
     bend_ri: float = 3.5          # inside radius of the bends over the rail's top corners
     inner_len: float = 26.0       # the inner leaf's straight
@@ -161,10 +166,36 @@ class HolderParams:
         return ((q[0] - cx) * nx + (q[1] - cy) * ny, -((q[0] - cx) * dx + (q[1] - cy) * dy))
 
     @property
-    def pad_axis(self) -> tuple[Pt, Pt]:
-        """The pad is a stadium of radius pad_r round this line, from its
-        nose's centre (pad_r off the rail face) to the hanger's centreline."""
-        return ((self.pad_r, -self.pad_y), self.hanger_at(-self.pad_y))
+    def pad_nose(self) -> Pt:
+        """Centre of the pad's nose, which touches the rail face at pad_y."""
+        return (self.pad_r, -self.pad_y)
+
+    @property
+    def pad_gap(self) -> float:
+        """From the nose's centre to the hanger's rail-side face."""
+        (cx, cy), (nx, ny) = self.pad_nose, self.hanger_n
+        fx, fy = self.hanger_start
+        return (fx - self.t / 2 * nx - cx) * nx + (fy - self.t / 2 * ny - cy) * ny
+
+    def _pad_fillet(self, side: int) -> tuple[Pt, Pt, Pt]:
+        """The concave fillet above (side -1) or below (+1) the nose: its
+        centre, pad_fillet off the hanger's rail-side face and pad_r +
+        pad_fillet from the nose's centre, and its tangent points on the
+        face and on the nose."""
+        (cx, cy), (nx, ny), (dx, dy) = self.pad_nose, self.hanger_n, self.hanger_dir
+        r, f = self.pad_r, self.pad_fillet
+        a = self.pad_gap - f
+        b = side * math.sqrt((r + f) ** 2 - a**2)
+        kx, ky = cx + a * nx + b * dx, cy + a * ny + b * dy
+        on_face = (kx + f * nx, ky + f * ny)
+        on_nose = (cx + r * (kx - cx) / (r + f), cy + r * (ky - cy) / (r + f))
+        return (kx, ky), on_face, on_nose
+
+    @property
+    def pad_blend(self) -> tuple[Pt, Pt]:
+        """Where the pad's fillets meet the hanger's rail-side face, above
+        and below."""
+        return self._pad_fillet(-1)[1], self._pad_fillet(1)[1]
 
     @property
     def pad_thick(self) -> float:
@@ -272,7 +303,7 @@ class HolderParams:
         dims = ("rail_t", "mattress_clear", "device_t", "slot_clearance", "drop", "t", "bend_ri", "inner_len",
                 "inner_pre", "inner_flare_r", "inner_flare_deg", "lip_base", "lip_r", "lip_lean", "lip_pre",
                 "lip_flare_r", "lip_flare_deg", "lip_tip", "stub", "length", "label_depth", "label_size",
-                "modulus", "creep_limit", "max_size", "lean", "rail_h", "pad_y", "pad_r")
+                "modulus", "creep_limit", "max_size", "lean", "rail_h", "pad_y", "pad_r", "pad_fillet")
         bad = [d for d in dims if getattr(self, d) <= 0]
         if bad:
             raise ValueError(f"must be positive: {', '.join(bad)}")
@@ -297,14 +328,19 @@ class HolderParams:
                 f"the pad hangs off the bottom of the rail ({self.pad_y + self.pad_r:g} below its top, on a "
                 f"{self.rail_h:g} rail): raise pad_y or shrink pad_r"
             )
-        if not (self.hanger_end[1] < -self.pad_y - self.pad_r and -self.pad_y + self.pad_r < self.hanger_start[1]):
-            raise ValueError(
-                "the pad must meet the hanger between the rail top and the pocket: move pad_y or deepen drop"
-            )
-        if self.pad_axis[1][0] <= self.pad_r:
+        if self.pad_gap <= self.pad_r:
             raise ValueError(
                 f"lean {self.lean:g} is too small to hold the hanger off the rail at the pad: "
                 "lean more, lower the pad, or shrink pad_r"
+            )
+        if self.pad_gap >= self.pad_r + 2 * self.pad_fillet:
+            raise ValueError(
+                f"pad_fillet {self.pad_fillet:g} is too small to reach the hanger from the pad's nose: grow it"
+            )
+        up, down = self.pad_blend
+        if not (self.hanger_end[1] < down[1] and up[1] < self.hanger_start[1]):
+            raise ValueError(
+                "the pad must meet the hanger between the rail top and the pocket: move pad_y or deepen drop"
             )
         if self.protrusion > self.mattress_clear:
             raise ValueError(
@@ -367,9 +403,35 @@ def profile(p: HolderParams) -> Sketch:
     wire = _wire(centreline(p))
     sketch = Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
     if p.section == "full":
-        pad = Wire([Line(*p.pad_axis)]).offset_2d(p.pad_r, kind=Kind.ARC, side=Side.BOTH, closed=True)
-        sketch += Sketch([make_face(pad)])
+        # close the pad's outline inside the strip, along its centreline
+        (_, up, _), (_, down, _) = p._pad_fillet(-1), p._pad_fillet(1)
+        nx, ny = p.hanger_n
+        up_in, down_in = (up[0] + p.t / 2 * nx, up[1] + p.t / 2 * ny), (down[0] + p.t / 2 * nx, down[1] + p.t / 2 * ny)
+        edges = pad_outline(p) + [Line(down, down_in), Line(down_in, up_in), Line(up_in, up)]
+        sketch += Sketch([make_face(Wire(edges))])
     return sketch
+
+
+def pad_outline(p: HolderParams) -> list[Edge]:
+    """The pad's exposed outline, from where it leaves the hanger's rail-side
+    face above the nose to where it rejoins it below: the upper fillet, the
+    nose round the rail side, the lower fillet."""
+    (cx, cy), (nx, ny), r, f = p.pad_nose, p.hanger_n, p.pad_r, p.pad_fillet
+
+    def fillet(side: int) -> tuple[Pt, Pt, Pt]:
+        (kx, ky), on_face, on_nose = p._pad_fillet(side)
+        # midway round the short arc: between the directions to its two ends
+        mx, my = nx + (cx - kx) / (r + f), ny + (cy - ky) / (r + f)
+        m = math.hypot(mx, my)
+        return on_face, (kx + f * mx / m, ky + f * my / m), on_nose
+
+    face_up, mid_up, nose_up = fillet(-1)
+    face_dn, mid_dn, nose_dn = fillet(1)
+    return [
+        ThreePointArc(face_up, mid_up, nose_up),
+        ThreePointArc(nose_up, (cx - r * nx, cy - r * ny), nose_dn),  # the long way, round the rail side
+        ThreePointArc(nose_dn, mid_dn, face_dn),
+    ]
 
 
 def label_y(p: HolderParams) -> float:
@@ -381,7 +443,7 @@ def label_y(p: HolderParams) -> float:
         return (top - p.stub) / 2
     if p.section == "pocket":
         return p.hanger_end[1] + p.stub / 2 * math.cos(p._a)
-    return (top - p.pad_y + p.pad_r) / 2
+    return (top + p.pad_blend[0][1]) / 2
 
 
 def holder(p: HolderParams) -> Part:
