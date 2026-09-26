@@ -283,3 +283,33 @@ def centreline(p: HolderParams) -> list[Seg]:
     tw.line(tw.pos[1] - p.j_y)
     tw.arc(p.j_r, math.pi)
     return tw.segs + p._lip(p.lip_straight)
+
+
+def _wire(segs: list[Seg]) -> Wire:
+    edges = [ThreePointArc(s.start, s.mid, s.end) if s.is_arc else Line(s.start, s.end) for s in segs]
+    return Wire(edges)
+
+
+def profile(p: HolderParams) -> Sketch:
+    p.validate()
+    wire = _wire(centreline(p))
+    return Sketch([make_face(wire.offset_2d(p.t / 2, kind=Kind.ARC, side=Side.BOTH, closed=True))])
+
+
+def label_y(p: HolderParams) -> float:
+    """Where along the hanger's rail-side face the ID is centred."""
+    if p.section == "clamp":
+        return -p._k - p.stub / 2
+    if p.section == "pocket":
+        return p.j_y + p.stub / 2
+    return -p.drop / 2
+
+
+def holder(p: HolderParams) -> Part:
+    body = extrude(profile(p), amount=p.length)
+    if p.label:
+        # on the hanger's face toward the rail, reading down the hanger
+        face = Plane(origin=(p.hanger_x - p.t / 2, label_y(p), p.length / 2), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
+        text = face * Text(p.label, font_size=p.label_size, font_style=FontStyle.BOLD)
+        body -= extrude(text, amount=-p.label_depth)
+    return body

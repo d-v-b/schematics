@@ -1,10 +1,59 @@
-"""The holder's parameters refuse geometry that would not fit, would not
-print, or would creep. Each test covers one validation error; the geometry
-itself is tested in test_holder."""
+"""The holder is one bent strip, extruded along the rail. Across devices,
+sections, strip thicknesses and drops it builds one valid solid of the
+expected extents; its pocket floor, inner-leaf contact and lip contact sit
+where the parameters put them; it clears the mattress and stays under the
+creep ceiling; and a label engraves it.
+
+One test covers the combinations; the rest each cover one validation error.
+"""
 
 import pytest
+from build123d import Vector
 
-from holder import HolderParams
+from holder import HolderParams, holder
+
+TOL = 1e-3
+
+
+@pytest.mark.parametrize("section", ["full", "clamp", "pocket"])
+@pytest.mark.parametrize("device_t,t,drop", [
+    (11.5, 3.0, 200.0),   # the laptop, as specified
+    (9.3, 3.0, 200.0),    # the phone
+    (11.5, 2.5, 160.0),   # thinner strip, shallowest pocket
+    (9.3, 2.5, 180.0),
+])
+def test_holder(section, device_t, t, drop):
+    p = HolderParams(device_t=device_t, t=t, drop=drop, section=section, length=10)
+    p.validate()
+    body = holder(p)
+    assert body.is_valid() and len(body.solids()) == 1
+
+    bb = body.bounding_box()
+    assert (bb.min.Z, bb.max.Z) == pytest.approx((0, p.length), abs=TOL)
+    top = p.top_y if section != "pocket" else p.j_y + p.stub + t / 2
+    bottom = -drop - t if section != "clamp" else -p.stub - t / 2
+    assert (bb.min.Y, bb.max.Y) == pytest.approx((bottom, top), abs=TOL)
+
+    z = p.length / 2
+    if section != "pocket":
+        # relaxed, the inner leaf reaches inner_pre into the rail at one point
+        x, y = p.inner_contact
+        assert x == pytest.approx(-p.rail_t + p.inner_pre, abs=1e-6)
+        assert body.is_inside(Vector(x - 0.05, y, z)) and not body.is_inside(Vector(x + 0.05, y, z))
+        assert p.protrusion <= p.mattress_clear
+        assert p.inner_stress <= p.creep_limit
+    if section != "clamp":
+        # the pocket's floor, the inside of the J, is drop below the rail top
+        mid = p.back_x + device_t / 2
+        assert body.is_inside(Vector(mid, -drop - 0.05, z)) and not body.is_inside(Vector(mid, -drop + 0.05, z))
+        # relaxed, the lip reaches lip_pre into the device at one point
+        x, y = p.lip_contact
+        assert x == pytest.approx(p.back_x + device_t - p.lip_pre, abs=1e-6)
+        assert body.is_inside(Vector(x + 0.05, y, z)) and not body.is_inside(Vector(x - 0.05, y, z))
+        assert p.lip_stress <= p.creep_limit
+
+    labelled = holder(HolderParams(device_t=device_t, t=t, drop=drop, section=section, length=10, label="ip1.0 t3"))
+    assert labelled.is_valid() and labelled.volume < body.volume
 
 
 def test_non_positive():
