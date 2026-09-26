@@ -3,7 +3,7 @@
 A clip that hooks over the bed's side rail and stores a device upright in a
 pocket that hangs down the rail's outer face. It's for storage, not
 viewing: the device sits low, out of the way when getting in and out of
-bed, and leans back against the rail. One parametric profile makes both
+bed, and rests back against the rail. One parametric profile makes both
 the laptop and the phone versions. Printed in PETG.
 
 ## Requirements
@@ -15,10 +15,10 @@ the laptop and the phone versions. Printed in PETG.
 - Holds a 15" M4 MacBook Air (340 × 238 × 11.5 mm, 1.51 kg), standing on
   its long edge, and, as a separate part, an iPhone 4 with no case
   (115 × 59 × 9.3 mm).
-- The pocket floor is 160–200 mm below the rail top (default 200), so the
+- The device's seat is 160–200 mm below the rail top (default 200), so the
   phone sits wholly below the rail top and the laptop pokes out about
   38 mm, at or below the mattress top.
-- The device tips back toward the bed and doesn't rattle.
+- The device rests back against the hanger and doesn't rattle.
 - Looks like one strip of heat-bent plastic: constant thickness, smooth
   bends, no sharp corners. Its compliance comes from those bends.
 - Prints flat on a 256 × 256 mm bed, with the extrusion (along the rail)
@@ -53,18 +53,20 @@ side:
 5. **Outer corner bend:** the same as 3, mirrored.
 6. **Hanger:** a straight down the outer face, to the J.
 7. **J-bend:** a 180° arc whose centreline radius is gap/2 + t/2, where
-   gap = `device_t` + `slot_clearance` (default 0.5). Its inside bottom
-   sits at y = −`drop` (default 200). This is the pocket floor.
+   gap = `device_t` + `slot_clearance` (default 0.5). Its centre sits at
+   y = −`drop` (default 200), which is where the device's foot seats; its
+   inside bottom is gap/2 lower.
 8. **Lip:** a straight of 10, then an arc of R 20 leaning `lip_lean`
    (default 6°) in toward the device, then a straight whose length is
-   solved so that, relaxed, the lip's inner surface at the knee overlaps
-   the device by `lip_pre` (default 0.75).
+   solved so that, relaxed, the lip's inner surface reaches the device by
+   `lip_pre` (default 0.75) where its flare turns it back through
+   vertical.
 9. **Lip flare:** an arc of R 8 turning 40° outward, then a 4 mm straight,
    as a lead-in.
 
 The device's back rests on the hanger's outer surface, and its foot sits in
-the J. The lip's preload pushes the device's lower back onto the hanger,
-which tips it toward the bed.
+the J. The lip's preload pushes the device's lower back onto the hanger, so
+it rests back against it.
 
 Parts, all from this one profile:
 
@@ -150,12 +152,12 @@ A new `bedside-holder/` directory, following `beam-clip/`:
 - `holder.py`: params, spring solves, validation, centreline, profile,
   part, and a CLI that writes STL, STEP or SVG
 - `test_holder.py`
-
-No `conftest.py` is needed, since nothing is shared between the test files.
-- `justfile`: `laptop`, `phone`, the coupon sweeps, `render` (SVG
-  profile), `test`, `clean`
+- `justfile`: `laptop`, `phone`, the coupon sweeps, `render` (any output),
+  `preview` (the README's SVG profile), `test`, `clean`
 - `pixi.toml`
 - `README.md`: a short write-up with the rendered `profile.svg`
+
+No `conftest.py` is needed, since nothing is shared between the test files.
 
 ## Testing
 
@@ -165,7 +167,7 @@ grid of reasonable parameters: both devices, each `section`, `t` 2.5 and
 
 - the solid is valid
 - its bounding box matches the expected extents
-- the pocket's inside bottom is at y = −`drop`
+- the device's seat, the J's centre, is at y = −`drop`
 - the relaxed slot gap at the lip knee equals `device_t` − `lip_pre`
 - the inner leaf's knee overlaps the rail by `inner_pre`
 - the mattress-side protrusion is ≤ `mattress_clear`

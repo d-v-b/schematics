@@ -31,7 +31,7 @@ def test_holder(section, device_t, t, drop):
     bb = body.bounding_box()
     assert (bb.min.Z, bb.max.Z) == pytest.approx((0, p.length), abs=TOL)
     top = p.top_y if section != "pocket" else p.j_y + p.stub + t / 2
-    bottom = -drop - t if section != "clamp" else -p.stub - t / 2
+    bottom = -drop - p.gap / 2 - t if section != "clamp" else -p.stub - t / 2
     assert (bb.min.Y, bb.max.Y) == pytest.approx((bottom, top), abs=TOL)
 
     z = p.length / 2
@@ -43,9 +43,14 @@ def test_holder(section, device_t, t, drop):
         assert p.protrusion <= p.mattress_clear
         assert p.inner_stress <= p.creep_limit
     if section != "clamp":
-        # the pocket's floor, the inside of the J, is drop below the rail top
+        # the J's inside bottom is gap/2 below the seat
         mid = p.back_x + device_t / 2
-        assert body.is_inside(Vector(mid, -drop - 0.05, z)) and not body.is_inside(Vector(mid, -drop + 0.05, z))
+        assert body.is_inside(Vector(mid, -drop - p.gap / 2 - 0.05, z))
+        assert not body.is_inside(Vector(mid, -drop - p.gap / 2 + 0.05, z))
+        # the seat: just above it at the hanger face is open slot, and 1 mm
+        # below it the J wall has already curved in under the device's rear corner
+        assert not body.is_inside(Vector(p.back_x + 0.05, -drop + 0.05, z))
+        assert body.is_inside(Vector(p.back_x + 0.05, -drop - 1.0, z))
         # relaxed, the lip reaches lip_pre into the device at one point
         x, y = p.lip_contact
         assert x == pytest.approx(p.back_x + device_t - p.lip_pre, abs=1e-6)
@@ -84,6 +89,11 @@ def test_inner_leaf_cannot_lean():
 def test_lip_cannot_reach():
     with pytest.raises(ValueError, match="lip reaches the device before it stops leaning"):
         HolderParams(lip_r=200.0, lip_lean=20.0).validate()
+
+
+def test_lip_flare_too_small():
+    with pytest.raises(ValueError, match="lip_flare_deg must exceed lip_lean"):
+        HolderParams(lip_flare_deg=4.0).validate()
 
 
 def test_mattress_clearance():

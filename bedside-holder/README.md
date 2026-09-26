@@ -2,7 +2,7 @@
 
 A clip that hooks over the bed's side rail and stores a device upright in a
 pocket that hangs down the rail's outer face. The device sits low, so it's
-out of the way when you get in and out of bed, and it leans back against
+out of the way when you get in and out of bed, and it rests back against
 the rail. The same design makes a laptop clip (a 15" MacBook Air; print
 two, about 200 mm apart) and a phone clip (an iPhone 4).
 
@@ -15,9 +15,9 @@ tangent arcs, thickened evenly either side. From the bed side:
   They're placed to touch the corners, so the strip stands about 1 mm clear
   of the top edge and doesn't care how square it is
 - the **hanger** down the outer face; the device's back rests on it
-- a 180° **J**, whose inside is the pocket floor, 200 mm below the rail top
+- a 180° **J**, in which the device's foot seats 200 mm below the rail top
 - the **spring lip**, which leans in 6° to overlap the device by 0.75 mm,
-  pressing its lower back onto the hanger so it tips toward the bed, then
+  pressing its lower back onto the hanger so it rests back against it, then
   flares out as a lead-in
 
 ![profile](profile.svg)
@@ -62,3 +62,5 @@ those values at the top of the `justfile`, then:
 pixi run just laptop   # print two
 pixi run just phone
 ```
+
+`pixi run just preview` regenerates `profile.svg`.

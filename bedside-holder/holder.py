@@ -12,7 +12,7 @@ a spring lip that leans in and flares out again as a lead-in.
 Relaxed, the inner leaf overlaps the rail by ``inner_pre`` and the lip
 overlaps the device by ``lip_pre``; both are cantilevers of the strip that
 those overlaps preload. The lip pushes the device's lower back onto the
-hanger, so it tips back toward the bed.
+hanger, so it rests back against the hanger.
 
 Coordinates: X across the rail, which occupies -rail_t <= x <= 0 (+x away
 from the bed); Y up, with y = 0 the rail's top edge; Z along the rail. The
@@ -59,7 +59,7 @@ class HolderParams:
     mattress_clear: float = 5.0   # room between the rail's inner face and the mattress
     device_t: float = 11.5        # the device's thickness: 11.5 MacBook Air 15", 9.3 iPhone 4
     slot_clearance: float = 0.5   # the pocket's gap is device_t plus this
-    drop: float = 200.0           # pocket floor (inside of the J) below the rail's top edge
+    drop: float = 200.0           # where the device's foot seats (the J's centre) below the rail's top edge
     t: float = 3.0                # strip thickness
     bend_ri: float = 3.5          # inside radius of the bends over the rail's top corners
     inner_len: float = 26.0       # the inner leaf's straight
@@ -116,8 +116,9 @@ class HolderParams:
 
     @property
     def j_y(self) -> float:
-        """Height of the J's centre and of the lip's root."""
-        return -self.drop + self.gap / 2
+        """Height of the J's centre, where the device's foot seats, and of
+        the lip's root."""
+        return -self.drop
 
     @property
     def top_y(self) -> float:
@@ -226,6 +227,8 @@ class HolderParams:
             raise ValueError(f"section must be one of {SECTIONS}, not {self.section!r}")
         if min(self.inner_flare_r, self.lip_r, self.lip_flare_r) <= self.t / 2:
             raise ValueError("every arc's radius must exceed t / 2, or the strip folds over itself on the inside")
+        if self.lip_flare_deg <= self.lip_lean:
+            raise ValueError("lip_flare_deg must exceed lip_lean, or the lip never turns back from the device")
         if self.label_depth >= self.t:
             raise ValueError(f"label_depth {self.label_depth:g} must be less than t {self.t:g}")
         if math.isnan(self.inner_lean):
@@ -239,7 +242,7 @@ class HolderParams:
         if self.protrusion > self.mattress_clear:
             raise ValueError(
                 f"the fitted inner leaf stands {self.protrusion:.2f} off the rail, more than the "
-                f"{self.mattress_clear:g} mattress clearance: thin t, shrink bend_ri, or flare less"
+                f"{self.mattress_clear:g} mattress clearance: thin t or shrink bend_ri, or flare the leaf less"
             )
         w, h = self.size
         if max(w, h) > self.max_size:
