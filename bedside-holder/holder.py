@@ -313,3 +313,48 @@ def holder(p: HolderParams) -> Part:
         text = face * Text(p.label, font_size=p.label_size, font_style=FontStyle.BOLD)
         body -= extrude(text, amount=-p.label_depth)
     return body
+
+
+def _svg(p: HolderParams, out: Path) -> None:
+    """The profile, relaxed, over the rail (dashed) with the device ghosted."""
+    from build123d import ExportSVG, LineType, Location, Rectangle
+
+    rail = Rectangle(p.rail_t, 160).moved(Location((-p.rail_t / 2, -80)))
+    dev = Rectangle(p.device_t, 60).moved(Location((p.back_x + p.device_t / 2, -p.drop + 30)))
+    svg = ExportSVG(scale=2, margin=6, line_weight=0.35)
+    svg.add_layer("rail", line_color=(150, 150, 150), line_type=LineType.ISO_DASH, line_weight=0.2)
+    svg.add_layer("device", line_color=(190, 190, 190), line_type=LineType.ISO_DOT, line_weight=0.2)
+    svg.add_shape(rail, layer="rail")
+    if p.section != "clamp":
+        svg.add_shape(dev, layer="device")
+    svg.add_shape(profile(p))
+    svg.write(str(out))
+
+
+def _cli() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("-o", "--output", type=Path, required=True, help=".stl, .step or .svg path")
+    for f in fields(HolderParams):
+        ap.add_argument(f"--{f.name}", type=type(f.default), default=f.default)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _cli().parse_args(argv)
+    p = HolderParams(**{f.name: getattr(args, f.name) for f in fields(HolderParams)})
+    out: Path = args.output
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.suffix == ".svg":
+        _svg(p, out)
+    elif out.suffix == ".step":
+        from build123d import export_step
+
+        export_step(holder(p), str(out))
+    else:
+        export_stl(holder(p), str(out), tolerance=0.01, angular_tolerance=0.1)
+    print(f"-> {out}")
+    print(p.report())
+
+
+if __name__ == "__main__":
+    main()

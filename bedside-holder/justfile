@@ -1,0 +1,82 @@
+# Dev actions for the bedside holder: one bent strip that hooks over the bed
+# rail and stores a device upright in a pocket down the rail's outer face.
+# Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+t := "3"              # strip thickness, mm
+inner_pre := "1.0"    # relaxed overlap of the inner leaf into the rail, mm
+lip_pre := "0.75"     # relaxed overlap of the lip into the device, mm
+drop := "200"         # pocket floor below the rail's top edge, mm
+laptop_t := "11.5"    # MacBook Air 15"
+phone_t := "9.3"      # iPhone 4, no case
+args := "--t " + t + " --inner_pre " + inner_pre + " --lip_pre " + lip_pre + " --drop " + drop
+
+# --- Coupons: the profile extruded 10 mm, cropped to the clamp or the pocket.
+# Short fit tests, so the creep ceiling is relaxed: the sweep deliberately
+# brackets it.
+coupon_length := "10"
+coupon_ts := "2.5 3"
+coupon_inner_pres := "0.5 1.0 1.5"
+coupon_lip_pres := "0.5 0.75 1.0"
+coupon_args := "--length " + coupon_length + " --creep_limit 30"
+
+default:
+    @just --list
+
+# Render the holder (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --t 2.5`
+[positional-arguments]
+render outfile *args:
+    {{python}} holder.py -o "$@"
+
+# Clamp coupons over inner_pre x t: push each onto the rail
+clamp-coupons:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for t in {{coupon_ts}}; do
+        for ip in {{coupon_inner_pres}}; do
+            just render "{{out}}/clamp_coupon_t${t}_ip${ip}.stl" {{coupon_args}} --section clamp \
+                --t "$t" --inner_pre "$ip" --label "ip$ip t$t"
+        done
+    done
+
+# Pocket coupons for one device thickness over lip_pre x t: slide the device in and out
+[positional-arguments]
+pocket-coupons device_t=laptop_t:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for t in {{coupon_ts}}; do
+        for lp in {{coupon_lip_pres}}; do
+            just render "{{out}}/pocket_coupon_d{{device_t}}_t${t}_lp${lp}.stl" {{coupon_args}} --section pocket \
+                --device_t {{device_t}} --t "$t" --lip_pre "$lp" --label "lp$lp t$t"
+        done
+    done
+
+# Pocket coupons for the phone
+phone-coupons:
+    just pocket-coupons {{phone_t}}
+
+# One laptop clip (print two, ~200 mm apart under the laptop)
+laptop:
+    just render "{{out}}/holder_laptop_t{{t}}_ip{{inner_pre}}_lp{{lip_pre}}.stl" {{args}} \
+        --device_t {{laptop_t}} --length 50 --label "laptop t{{t}}"
+
+# The phone clip
+phone:
+    just render "{{out}}/holder_phone_t{{t}}_ip{{inner_pre}}_lp{{lip_pre}}.stl" {{args}} \
+        --device_t {{phone_t}} --length 40 --label "phone t{{t}}"
+
+# Regenerate the drawing used by the README
+preview:
+    just render profile.svg {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
