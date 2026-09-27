@@ -92,7 +92,7 @@ Parts, all from this one profile:
 
 | part   | `device_t` | `length` | count | spacing on rail |
 |--------|-----------:|---------:|------:|-----------------|
-| laptop |       11.5 |       50 |     2 | ~200 mm apart   |
+| laptop |       11.5 |      160 |     2 | end to end      |
 | phone  |        9.3 |       40 |     1 | —               |
 
 ## Parameters

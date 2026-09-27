@@ -49,10 +49,10 @@ coupons device_t=laptop_t:
 phone-coupons:
     just coupons {{phone_t}}
 
-# One laptop clip (print two, ~200 mm apart under the laptop)
+# One laptop clip, 160 mm along the rail (print two, end to end: 320 of the laptop's 340 mm)
 laptop:
     just render "{{out}}/holder_laptop_t{{t}}_ip{{inner_pre}}_lp{{lip_pre}}.stl" {{args}} \
-        --device_t {{laptop_t}} --length 50 --label "laptop t{{t}}"
+        --device_t {{laptop_t}} --length 160 --label "laptop t{{t}}"
 
 # The phone clip
 phone:

@@ -3,8 +3,9 @@
 A clip that hooks over the bed's side rail and stores a device upright in a
 pocket that hangs down the rail's outer face. The device sits low, so it's
 out of the way when you get in and out of bed, and it leans 7° with its top
-toward the bed, so it can't flop outward. The same design makes a laptop clip (a 15" MacBook Air; print
-two, about 200 mm apart) and a phone clip (an iPhone 4).
+toward the bed, so it can't flop outward. The same design makes a laptop
+clip (a 15" MacBook Air; 160 mm along the rail, print two and set them end
+to end to carry 320 of its 340 mm) and a phone clip (an iPhone 4).
 
 It's one 3 mm strip, bent like heat-formed plastic: straight runs joined by
 tangent arcs, thickened evenly either side. From the bed side:
@@ -69,7 +70,7 @@ loosest one that doesn't slide on the rail and holds the device without
 rattling. Set those values at the top of the `justfile`, then:
 
 ```bash
-pixi run just laptop   # print two
+pixi run just laptop   # print two, 160 mm each
 pixi run just phone
 ```
 
