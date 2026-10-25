@@ -1,0 +1,38 @@
+# Dev actions for the plant pot base: a floor and a low wall whose top edge
+# waves round the rim. Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+pot_d := "70"       # the pot's diameter at its foot, mm
+slack := "5"        # how much wider the pocket is than the pot, across, mm
+peak_h := "10"      # the wave's peaks, from the bed, mm
+trough_h := "6"     # ... and its troughs
+lobes := "6"        # waves round the rim
+args := "--pot_d " + pot_d + " --slack " + slack + " --peak_h " + peak_h + " --trough_h " + trough_h + " --lobes " + lobes
+
+default:
+    @just --list
+
+# Render the base (.stl, .step or .svg) with any --param overrides, e.g. `just render out.stl --lobes 8`
+[positional-arguments]
+render outfile *args:
+    {{python}} base.py -o "$@"
+
+# Render the base with the values above
+base:
+    just render "{{out}}/base_d{{pot_d}}_s{{slack}}_h{{trough_h}}-{{peak_h}}_l{{lobes}}.stl" {{args}}
+
+# Regenerate the drawing used by the README
+preview:
+    just render preview.svg {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
