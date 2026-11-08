@@ -1,5 +1,6 @@
-# Dev actions for the plant pot base: a floor and a low wall whose top edge
-# waves round the rim. Run `just` to list them.
+# Dev actions for the plant pot bases: a floor and a low wall whose top edge
+# waves round the rim. There are two: a 7 cm one with a flat floor, and a
+# 15 cm one whose floor is rippled. Run `just` to list them.
 #
 # Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
 
@@ -13,6 +14,16 @@ trough_h := "6"     # ... and its troughs
 lobes := "6"        # waves round the rim
 args := "--pot_d " + pot_d + " --slack " + slack + " --peak_h " + peak_h + " --trough_h " + trough_h + " --lobes " + lobes
 
+# The 15 cm base. pot_d + slack + 2 * 2.4 wall = 150 across.
+big_pot_d := "140.2"
+big_peak_h := "25"
+big_trough_h := "21"
+big_lobes := "11"   # lobes about as long as the small base's
+ripple_a := "5"     # the floor's ripples: amplitude, so they stand 10 high
+ripple_l := "33.333" # ... wavelength along x and y
+ripple_fade := "15" # ... and the width they fade out over before the wall
+big_args := "--pot_d " + big_pot_d + " --slack " + slack + " --peak_h " + big_peak_h + " --trough_h " + big_trough_h + " --lobes " + big_lobes + " --ripple_a " + ripple_a + " --ripple_l " + ripple_l + " --ripple_fade " + ripple_fade
+
 default:
     @just --list
 
@@ -25,9 +36,14 @@ render outfile *args:
 base:
     just render "{{out}}/base_d{{pot_d}}_s{{slack}}_h{{trough_h}}-{{peak_h}}_l{{lobes}}.stl" {{args}}
 
-# Regenerate the drawing used by the README
+# Render the 15 cm base with the values above
+base-15:
+    just render "{{out}}/base_d150_h{{big_trough_h}}-{{big_peak_h}}_l{{big_lobes}}_ripple{{ripple_a}}x{{ripple_l}}_f{{ripple_fade}}.stl" {{big_args}}
+
+# Regenerate the drawings used by the README
 preview:
     just render preview.svg {{args}}
+    just render preview-15.svg {{big_args}}
 
 # Run the geometry tests
 test:
