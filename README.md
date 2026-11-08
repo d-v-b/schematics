@@ -12,4 +12,4 @@ This repository contains models / plans for physical things. Likely stuff I need
 - [`corner-bracket/`](corner-bracket/): a right-angle bracket for two M8 bolts, with a rib in the inside corner along one edge.
 - [`beam-clip/`](beam-clip/): a flat 3 mm clip, flush on a 40 mm beam's face, whose serpentine strip holds on by being stretched across it.
 - [`cam-anchor/`](cam-anchor/): a trigger-released, four-cam anchor that sets itself in the 80 mm gap between ceiling beams and holds a hanging load.
-- [`plant-pot-base/`](plant-pot-base/): a base for a 7 cm plant pot, whose rim rises and falls in six gentle waves.
+- [`plant-pot-base/`](plant-pot-base/): bases for plant pots whose rim rises and falls in gentle waves: a 7 cm one, and a 15 cm one with a rippled floor that lets water stand under the pot and dry.
