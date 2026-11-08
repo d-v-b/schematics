@@ -20,13 +20,14 @@ bed to just above the floor; its outer corner on the bed is chamfered by
 ``foot_chamfer`` so the first layer's squash does not leave a lip.
 
 The floor's top can be flat, or rippled in two directions so the pot rests
-on a grid of rounded peaks and water stands in the dimples between them,
+on a few broad, rounded bumps and water stands in the hollows between them,
 where air reaches it and it dries:
 
-    z(x, y) = floor + ripple_a * (1 + cos(k x) * cos(k y)),  k = 2 pi / ripple_l
+    z(x, y) = floor + ripple_a * (1 + sin(k x) * cos(k y)),  k = 2 pi / ripple_l
 
-so ``floor`` is the thickness under the dimples, the peaks stand
-``2 * ripple_a`` above that, and one peak sits on the axis. With
+so ``floor`` is the thickness under the hollows, the bumps stand
+``2 * ripple_a`` above that, and the axis sits halfway up a slope. A long
+``ripple_l`` keeps the bumps few and gentle, so the floor wipes clean. With
 ``ripple_a = 0`` the floor is flat.
 
 The base sits on z = 0, centered on the axis, and prints the way it is
@@ -35,7 +36,7 @@ so nothing overhangs and nothing needs support.
 
 Usage:
     python base.py -o base.stl [--pot_d 70] [--slack 5] [--peak_h 10] [--lobes 6]
-    python base.py -o base.stl --pot_d 140.2 --peak_h 25 --trough_h 21 --lobes 11 --ripple_a 5
+    python base.py -o base.stl --pot_d 140.2 --peak_h 25 --trough_h 21 --lobes 11 --ripple_a 5 --ripple_l 100
 """
 
 from __future__ import annotations
@@ -79,7 +80,7 @@ class BaseParams:
     # Covers the pot's slope, which is not modeled.
     slack: float = 5.0
     wall: float = 2.4
-    # The floor's thickness; with ripples, its thickness under the dimples.
+    # The floor's thickness; with ripples, its thickness under the hollows.
     floor: float = 2.0
     # The wave on the wall's top edge, measured from the bed.
     peak_h: float = 10.0
@@ -128,13 +129,13 @@ class BaseParams:
 
     @property
     def floor_top(self) -> float:
-        """The highest point of the floor: the ripples' peaks."""
+        """The highest point of the floor: the ripples' bumps."""
         return self.floor + 2 * self.ripple_a
 
     def floor_z(self, x: float, y: float) -> float:
         """Height of the floor's top at (x, y) inside the pocket."""
         k = 2 * math.pi / self.ripple_l
-        return self.floor + self.ripple_a * (1 + math.cos(k * x) * math.cos(k * y))
+        return self.floor + self.ripple_a * (1 + math.sin(k * x) * math.cos(k * y))
 
     def validate(self) -> None:
         if self.pot_d <= 0 or self.wall <= 0 or self.floor <= 0:
@@ -217,7 +218,7 @@ def _wall(p: BaseParams) -> list[Solid]:
 def _floor(p: BaseParams) -> Solid:
     """The floor: a disc running halfway into the wall, so its rim fuses
     inside solid material rather than along the wall's inner face. With
-    ripples, its top is a B-spline fitted through the cosine on a square
+    ripples, its top is a B-spline fitted through the ripple on a square
     grid, and the disc is cut off under it."""
     r = p.pocket_d / 2 + p.wall / 2
     if p.ripple_a == 0:

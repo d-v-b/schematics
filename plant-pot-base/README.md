@@ -4,9 +4,9 @@ Round bases for plant pots: a floor and a 2.4 mm wall, whose top edge
 rises and falls in gentle waves round the rim. There are two:
 
 - a 7 cm base with a flat 2 mm floor and six waves (`pixi run base`), and
-- a 15 cm base whose floor is rippled, so the pot rests on rounded peaks
-  and water stands in the dimples between them, where air reaches it and
-  it dries (`pixi run base-15`). See [The 15 cm base](#the-15-cm-base).
+- a 15 cm base whose floor rises and falls in a few broad bumps, so the
+  pot rests on three of them and water stands in the hollows between,
+  where air reaches it and it dries (`pixi run base-15`). See [The 15 cm base](#the-15-cm-base).
 
 ![preview](preview.svg)
 
@@ -54,29 +54,33 @@ and anything over the 256 mm bed.
 lobes about 43 mm long, and a rippled floor:
 
 ```
-z(x, y) = floor + ripple_a * (1 + cos(k x) * cos(k y)),   k = 2 pi / ripple_l
+z(x, y) = floor + ripple_a * (1 + sin(k x) * cos(k y)),   k = 2 pi / ripple_l
 ```
 
-With `ripple_a` 5 mm and `ripple_l` 40 mm, the floor is 2 mm thick at the
-bottom of the dimples and 12 mm at the peaks, which sit 28 mm apart on a
-diagonal grid, one of them on the axis. The pot rests on the peaks and
+With `ripple_a` 5 mm and `ripple_l` 100 mm, the floor is 2 mm thick at the
+bottom of the hollows and 12 mm on top of the bumps. Inside the pocket
+there are three whole bumps, at (25, 0), (-25, 50) and (-25, -50) mm, and
+three whole hollows, at (-25, 0), (25, 50) and (25, -50) mm; the axis is
+halfway up a slope. The pot stands on the three bumps like a tripod, and
 stands 13 mm into the wall at the wall's highest points, 9 mm at its
-lowest. Between neighboring peaks the surface dips 5 mm through a saddle,
-so air moves under the pot in both directions, and each dimple holds
-water on its own. The steepest slope is about 38 degrees, and it faces
-up, so it prints without support.
+lowest. Where the floor meets the wall it runs anywhere from 2 to 12 mm
+high.
 
-The base is about 142 cm³ if printed solid; most of that is the floor
-under the peaks, so the slicer's infill sets how much plastic it takes.
-In the drawing the ripples show only as their silhouettes, with a few
-stray arcs at the sides where the hidden-line pass trips over the curved
-floor.
+The slopes are no steeper than 17 degrees and there are no ridges or
+small pits, so a sponge reaches every part of the floor. The slopes face
+up, so the base prints without support. A shorter `--ripple_l` gives more,
+steeper bumps.
+
+The base is about 141 cm³ if printed solid; most of that is the floor,
+so the slicer's infill sets how much plastic it takes.
+A line drawing shows the bumps only by their silhouette, the one curve
+across the floor.
 
 ## Use
 
 ```
 pixi run base                       # stl/base_d70_s5_h6-10_l6.stl
-pixi run base-15                    # stl/base_d150_h21-25_l11_ripple5x40.stl
+pixi run base-15                    # stl/base_d150_h21-25_l11_ripple5x100.stl
 pixi run render out.stl --lobes 8 --trough_h 4
 pixi run test
 ```
@@ -98,11 +102,10 @@ gave OCCT booleans that returned wrong volumes once the wave had more than
 six lobes, so the tests check the base's volume against the analytic value
 as well as its heights.
 
-The rippled floor is a B-spline fitted through the cosine on a grid about 2.5 mm apart,
-within about 5 µm of it, and a disc is cut off under it. OCCT could not
+The rippled floor is a B-spline fitted through the ripple on a grid of 16
+points per wavelength, and a disc is cut off under it. OCCT could not
 intersect that B-spline with the lofted wall, so the ring is there to give
 the floor a true cylinder to meet. The tests compare the volume against the
-analytic integral, which needs a Bessel function for the part of the
-ripple left over at the pocket's edge, and integrate the volume more
-finely than build123d's default, which is off by about 0.5 % on the
-B-spline.
+analytic value (the ripple is odd in x, so it adds only its mean height),
+and integrate the volume more finely than build123d's default, which is
+off by about 0.5 % on the B-spline.

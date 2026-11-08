@@ -20,7 +20,7 @@ big_peak_h := "25"
 big_trough_h := "21"
 big_lobes := "11"   # lobes about as long as the small base's
 ripple_a := "5"     # the floor's ripples: amplitude, so they stand 10 high
-ripple_l := "40"    # ... and wavelength along x and y
+ripple_l := "100"   # ... and wavelength along x and y: three bumps under the pot
 big_args := "--pot_d " + big_pot_d + " --slack " + slack + " --peak_h " + big_peak_h + " --trough_h " + big_trough_h + " --lobes " + big_lobes + " --ripple_a " + ripple_a + " --ripple_l " + ripple_l
 
 default:

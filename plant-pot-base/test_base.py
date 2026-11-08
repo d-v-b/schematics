@@ -28,18 +28,12 @@ def _top_xy(body, x: float, y: float) -> float:
     return max(pt.Z for pt, *_ in hits)
 
 
-def _j1(x: float, n: int = 2000) -> float:
-    """Bessel function J1, from its integral form."""
-    return sum(math.cos(t - x * math.sin(t))
-               for t in ((i + 0.5) * math.pi / n for i in range(n))) / n
-
-
 @pytest.mark.parametrize("pot_d,slack,peak_h,trough_h,lobes,crest_r,foot_chamfer,ripple_a,ripple_l", [
     (70.0, 5.0, 10.0, 6.0, 6, 1.0, 0.5, 0.0, 40.0),     # the default
     (70.0, 5.0, 10.0, 10.0, 6, 1.0, 0.5, 0.0, 40.0),    # no wave: a level rim
     (70.0, 3.0, 14.0, 5.0, 9, 0.8, 0.0, 0.0, 40.0),     # a deep wave, more lobes, no chamfer
     (120.0, 8.0, 20.0, 12.0, 3, 0.0, 0.4, 0.0, 40.0),   # a big pot, three lobes, sharp crest
-    (140.2, 5.0, 25.0, 21.0, 11, 1.0, 0.5, 5.0, 40.0),  # the 15 cm base, rippled floor
+    (140.2, 5.0, 25.0, 21.0, 11, 1.0, 0.5, 5.0, 100.0), # the 15 cm base, rippled floor
     (70.0, 5.0, 12.0, 9.0, 6, 1.0, 0.5, 1.5, 15.0),     # small, fine ripples
 ])
 def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, ripple_a, ripple_l):
@@ -78,24 +72,23 @@ def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, rippl
 
     # the volume adds up: the floor inside the pocket, plus a wall whose
     # mean height is midway between peak and trough, less the rounding and
-    # the chamfer. The ripples add ripple_a on average, plus what is left of
-    # cos(kx) cos(ky) = (cos k(x+y) + cos k(x-y)) / 2 over the pocket's disc
-    q = 2 * math.pi / ripple_l * math.sqrt(2)
-    floor = (math.pi * r_in**2 * (p.floor + ripple_a)
-             + ripple_a * 2 * math.pi * r_in * _j1(q * r_in) / q)
+    # the chamfer. The ripples add ripple_a on average: sin(kx) cos(ky) is
+    # odd in x, so it sums to nothing over the pocket's disc
+    floor = math.pi * r_in**2 * (p.floor + ripple_a)
     wall = (math.pi * (r_out**2 - r_in**2) * (peak_h + trough_h) / 2
             - 2 * (1 - math.pi / 4) * crest_r**2 * 2 * math.pi * (r_in + r_out) / 2
             - foot_chamfer**2 / 2 * 2 * math.pi * r_out)
     assert volume(body) == pytest.approx(floor + wall, rel=2e-3)
 
     # the pocket is clear to its full diameter down to the floor, whose top
-    # follows the ripples: a peak on the axis, dimples down to floor half a
-    # wavelength along, and the cosine everywhere else
+    # follows the ripples: halfway up on the axis, bumps and hollows a
+    # quarter wavelength either side, and the ripple everywhere else
     lam = ripple_l
-    assert _top_xy(body, 0, 0) == pytest.approx(p.floor_top, abs=0.01)
-    assert _top_xy(body, lam / 2, 0) == pytest.approx(p.floor, abs=0.01)
-    assert _top_xy(body, lam / 2, lam / 2) == pytest.approx(p.floor_top, abs=0.01)
-    assert _top_xy(body, lam / 4, 0.3 * lam) == pytest.approx(p.floor + ripple_a, abs=0.01)
+    assert _top_xy(body, 0, 0) == pytest.approx(p.floor + ripple_a, abs=0.01)
+    assert _top_xy(body, lam / 4, 0) == pytest.approx(p.floor_top, abs=0.01)
+    assert _top_xy(body, -lam / 4, 0) == pytest.approx(p.floor, abs=0.01)
+    assert _top_xy(body, -lam / 4, lam / 2) == pytest.approx(p.floor_top, abs=0.01)
+    assert _top_xy(body, lam / 4, lam / 2) == pytest.approx(p.floor, abs=0.01)
     edge = p.pocket_d / 2 - 0.01
     for x, y in [(13.0, 7.0), (-15.0, 22.0), (edge * math.cos(1.0), edge * math.sin(1.0))]:
         assert _top_xy(body, x, y) == pytest.approx(p.floor_z(x, y), abs=0.01)
