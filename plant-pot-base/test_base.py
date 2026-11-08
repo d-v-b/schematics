@@ -28,18 +28,20 @@ def _top_xy(body, x: float, y: float) -> float:
     return max(pt.Z for pt, *_ in hits)
 
 
-@pytest.mark.parametrize("pot_d,slack,peak_h,trough_h,lobes,crest_r,foot_chamfer,ripple_a,ripple_l", [
-    (70.0, 5.0, 10.0, 6.0, 6, 1.0, 0.5, 0.0, 40.0),     # the default
-    (70.0, 5.0, 10.0, 10.0, 6, 1.0, 0.5, 0.0, 40.0),    # no wave: a level rim
-    (70.0, 3.0, 14.0, 5.0, 9, 0.8, 0.0, 0.0, 40.0),     # a deep wave, more lobes, no chamfer
-    (120.0, 8.0, 20.0, 12.0, 3, 0.0, 0.4, 0.0, 40.0),   # a big pot, three lobes, sharp crest
-    (140.2, 5.0, 25.0, 21.0, 11, 1.0, 0.5, 5.0, 100.0), # the 15 cm base, rippled floor
-    (70.0, 5.0, 12.0, 9.0, 6, 1.0, 0.5, 1.5, 15.0),     # small, fine ripples
+@pytest.mark.parametrize(
+    "pot_d,slack,peak_h,trough_h,lobes,crest_r,foot_chamfer,ripple_a,ripple_l,ripple_fade", [
+    (70.0, 5.0, 10.0, 6.0, 6, 1.0, 0.5, 0.0, 40.0, 0.0),        # the default
+    (70.0, 5.0, 10.0, 10.0, 6, 1.0, 0.5, 0.0, 40.0, 0.0),       # no wave: a level rim
+    (70.0, 3.0, 14.0, 5.0, 9, 0.8, 0.0, 0.0, 40.0, 0.0),        # a deep wave, more lobes, no chamfer
+    (120.0, 8.0, 20.0, 12.0, 3, 0.0, 0.4, 0.0, 40.0, 0.0),      # a big pot, three lobes, sharp crest
+    (140.2, 5.0, 25.0, 21.0, 11, 1.0, 0.5, 5.0, 100 / 3, 15.0), # the 15 cm base, rippled floor
+    (70.0, 5.0, 12.0, 9.0, 6, 1.0, 0.5, 1.5, 15.0, 0.0),        # small, fine ripples, no fade
 ])
-def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, ripple_a, ripple_l):
+def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, ripple_a, ripple_l,
+             ripple_fade):
     p = BaseParams(pot_d=pot_d, slack=slack, peak_h=peak_h, trough_h=trough_h, lobes=lobes,
                    crest_r=crest_r, foot_chamfer=foot_chamfer, ripple_a=ripple_a,
-                   ripple_l=ripple_l)
+                   ripple_l=ripple_l, ripple_fade=ripple_fade)
     assert p.pocket_d == pytest.approx(pot_d + slack)
     assert p.outer_d == pytest.approx(pot_d + slack + 2 * p.wall)
     assert p.crest_z(0) == pytest.approx(peak_h)
@@ -72,8 +74,8 @@ def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, rippl
 
     # the volume adds up: the floor inside the pocket, plus a wall whose
     # mean height is midway between peak and trough, less the rounding and
-    # the chamfer. The ripples add ripple_a on average: sin(kx) cos(ky) is
-    # odd in x, so it sums to nothing over the pocket's disc
+    # the chamfer. The ripples add ripple_a on average: e(r) sin(kx) cos(ky)
+    # is odd in x, so it sums to nothing over the pocket's disc
     floor = math.pi * r_in**2 * (p.floor + ripple_a)
     wall = (math.pi * (r_out**2 - r_in**2) * (peak_h + trough_h) / 2
             - 2 * (1 - math.pi / 4) * crest_r**2 * 2 * math.pi * (r_in + r_out) / 2
@@ -92,6 +94,16 @@ def test_fit(pot_d, slack, peak_h, trough_h, lobes, crest_r, foot_chamfer, rippl
     edge = p.pocket_d / 2 - 0.01
     for x, y in [(13.0, 7.0), (-15.0, 22.0), (edge * math.cos(1.0), edge * math.sin(1.0))]:
         assert _top_xy(body, x, y) == pytest.approx(p.floor_z(x, y), abs=0.01)
+    # with a fade, the floor meets the wall level all round, and is halfway
+    # faded midway through the fade
+    if ripple_fade:
+        for theta in (0.0, 0.5, 1.3, 2.9, 4.4):
+            assert _top_z(body, edge, theta) == pytest.approx(p.floor + ripple_a, abs=0.01)
+        mid = p.pocket_d / 2 - ripple_fade / 2
+        x, y = mid * math.cos(0.3), mid * math.sin(0.3)
+        k = 2 * math.pi / ripple_l
+        expected = p.floor + ripple_a * (1 + 0.5 * math.sin(k * x) * math.cos(k * y))
+        assert _top_xy(body, x, y) == pytest.approx(expected, abs=0.01)
 
     assert_printable(body)
 
@@ -117,7 +129,7 @@ def test_rejects_peak_below_trough():
 
 
 def test_rejects_bad_ripple():
-    with pytest.raises(ValueError, match="ripple_a must not be negative and ripple_l must be positive"):
+    with pytest.raises(ValueError, match="ripple_fade must not be negative and ripple_l must be"):
         base(BaseParams(ripple_l=0.0))
 
 

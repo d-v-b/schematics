@@ -23,12 +23,14 @@ The floor's top can be flat, or rippled in two directions so the pot rests
 on a few broad, rounded bumps and water stands in the hollows between them,
 where air reaches it and it dries:
 
-    z(x, y) = floor + ripple_a * (1 + sin(k x) * cos(k y)),  k = 2 pi / ripple_l
+    z(x, y) = floor + ripple_a * (1 + e(r) * sin(k x) * cos(k y)),  k = 2 pi / ripple_l
 
 so ``floor`` is the thickness under the hollows, the bumps stand
-``2 * ripple_a`` above that, and the axis sits halfway up a slope. A long
-``ripple_l`` keeps the bumps few and gentle, so the floor wipes clean. With
-``ripple_a = 0`` the floor is flat.
+``2 * ripple_a`` above that, and the axis sits halfway up a slope. The
+envelope e(r) is 1 in the middle and falls smoothly to 0 over the last
+``ripple_fade`` before the wall, so the floor meets the wall level, at
+``floor + ripple_a`` all round, and the corner there is the same
+everywhere. With ``ripple_a = 0`` the floor is flat.
 
 The base sits on z = 0, centered on the axis, and prints the way it is
 modeled: floor on the bed, wall straight up. The crest only ever faces up,
@@ -36,7 +38,7 @@ so nothing overhangs and nothing needs support.
 
 Usage:
     python base.py -o base.stl [--pot_d 70] [--slack 5] [--peak_h 10] [--lobes 6]
-    python base.py -o base.stl --pot_d 140.2 --peak_h 25 --trough_h 21 --lobes 11 --ripple_a 5 --ripple_l 100
+    python base.py -o base.stl --pot_d 140.2 --peak_h 25 --trough_h 21 --lobes 11 --ripple_a 5 --ripple_l 33.333 --ripple_fade 15
 """
 
 from __future__ import annotations
@@ -66,7 +68,7 @@ BED = 256.0
 SECTIONS_PER_HALF_LOBE = 12
 # Grid points per ripple wavelength the floor's surface is fitted through,
 # and how far the fit may stray from the cosine, mm.
-RIPPLE_SAMPLES = 16
+RIPPLE_SAMPLES = 20
 RIPPLE_TOL = 1e-3
 
 
@@ -90,10 +92,12 @@ class BaseParams:
     crest_r: float = 1.0
     # Chamfer on the outer edge of the floor, against elephant's foot.
     foot_chamfer: float = 0.5
-    # Ripples on the floor's top: amplitude (0 for a flat floor) and
-    # wavelength along x and y.
+    # Ripples on the floor's top: amplitude (0 for a flat floor),
+    # wavelength along x and y, and the width they fade out over before
+    # the wall (0 for no fade).
     ripple_a: float = 0.0
     ripple_l: float = 40.0
+    ripple_fade: float = 0.0
 
     # ----- derived -----
     @property
@@ -129,13 +133,25 @@ class BaseParams:
 
     @property
     def floor_top(self) -> float:
-        """The highest point of the floor: the ripples' bumps."""
+        """The highest the floor can reach: the top of an unfaded bump."""
         return self.floor + 2 * self.ripple_a
 
+    def ripple_envelope(self, r: float) -> float:
+        """How much of the ripple is left at radius r: 1 up to ripple_fade
+        from the wall, falling to 0 at the wall and beyond along a quintic
+        smoothstep, whose first two derivatives are 0 at both ends, so the
+        floor's curvature has no jumps for the B-spline fit to miss. With
+        no fade, the ripple runs on into the wall untouched."""
+        if self.ripple_fade == 0:
+            return 1.0
+        t = min(max((r - self.pocket_d / 2) / self.ripple_fade + 1, 0.0), 1.0)
+        return 1 - t**3 * (10 - 15 * t + 6 * t**2)
+
     def floor_z(self, x: float, y: float) -> float:
-        """Height of the floor's top at (x, y) inside the pocket."""
+        """Height of the floor's top at (x, y)."""
         k = 2 * math.pi / self.ripple_l
-        return self.floor + self.ripple_a * (1 + math.sin(k * x) * math.cos(k * y))
+        e = self.ripple_envelope(math.hypot(x, y))
+        return self.floor + self.ripple_a * (1 + e * math.sin(k * x) * math.cos(k * y))
 
     def validate(self) -> None:
         if self.pot_d <= 0 or self.wall <= 0 or self.floor <= 0:
@@ -146,8 +162,9 @@ class BaseParams:
             raise ValueError("lobes must be at least 1")
         if self.peak_h < self.trough_h:
             raise ValueError("peak_h must not be below trough_h")
-        if self.ripple_a < 0 or self.ripple_l <= 0:
-            raise ValueError("ripple_a must not be negative and ripple_l must be positive")
+        if self.ripple_a < 0 or self.ripple_fade < 0 or self.ripple_l <= 0:
+            raise ValueError(
+                "ripple_a and ripple_fade must not be negative and ripple_l must be positive")
         if self.trough_h - self.floor_top < 2 * self.crest_r or self.trough_h <= self.floor_top:
             raise ValueError(
                 f"the wall stands only {self.trough_h - self.floor_top:g} above the floor at its "
@@ -162,8 +179,8 @@ class BaseParams:
             raise ValueError(f"the base is {self.outer_d:g} across, over the {BED:g} bed")
 
     def report(self) -> str:
-        floor = (f"floor rippled {self.floor:g}-{self.floor_top:g} high every {self.ripple_l:g}"
-                 if self.ripple_a else f"{self.floor:g} floor")
+        floor = (f"floor rippled {self.floor:g}-{self.floor_top:g} high every {self.ripple_l:g}, "
+                 f"fading over {self.ripple_fade:g}" if self.ripple_a else f"{self.floor:g} floor")
         return (
             f"base for a {self.pot_d:g} pot: {self.pocket_d:g} pocket, {self.outer_d:g} across, "
             f"{floor}, {self.wall:g} wall waving {self.trough_h:g}-{self.peak_h:g} "
@@ -219,12 +236,14 @@ def _floor(p: BaseParams) -> Solid:
     """The floor: a disc running halfway into the wall, so its rim fuses
     inside solid material rather than along the wall's inner face. With
     ripples, its top is a B-spline fitted through the ripple on a square
-    grid, and the disc is cut off under it."""
+    grid, fine enough for both the ripple and its fade, and the disc is cut
+    off under it."""
     r = p.pocket_d / 2 + p.wall / 2
     if p.ripple_a == 0:
         return Solid.make_cylinder(r, p.floor)
-    half = r + p.ripple_l / RIPPLE_SAMPLES
-    n = math.ceil(2 * half * RIPPLE_SAMPLES / p.ripple_l)
+    step = min(p.ripple_l, 2 * p.ripple_fade or p.ripple_l) / RIPPLE_SAMPLES
+    half = r + step
+    n = math.ceil(2 * half / step)
     xs = [-half + 2 * half * i / n for i in range(n + 1)]
     top = Face.make_surface_from_array_of_points(
         [[(x, y, p.floor_z(x, y)) for x in xs] for y in xs], tol=RIPPLE_TOL)

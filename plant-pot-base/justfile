@@ -20,8 +20,9 @@ big_peak_h := "25"
 big_trough_h := "21"
 big_lobes := "11"   # lobes about as long as the small base's
 ripple_a := "5"     # the floor's ripples: amplitude, so they stand 10 high
-ripple_l := "100"   # ... and wavelength along x and y: three bumps under the pot
-big_args := "--pot_d " + big_pot_d + " --slack " + slack + " --peak_h " + big_peak_h + " --trough_h " + big_trough_h + " --lobes " + big_lobes + " --ripple_a " + ripple_a + " --ripple_l " + ripple_l
+ripple_l := "33.333" # ... wavelength along x and y
+ripple_fade := "15" # ... and the width they fade out over before the wall
+big_args := "--pot_d " + big_pot_d + " --slack " + slack + " --peak_h " + big_peak_h + " --trough_h " + big_trough_h + " --lobes " + big_lobes + " --ripple_a " + ripple_a + " --ripple_l " + ripple_l + " --ripple_fade " + ripple_fade
 
 default:
     @just --list
@@ -37,7 +38,7 @@ base:
 
 # Render the 15 cm base with the values above
 base-15:
-    just render "{{out}}/base_d150_h{{big_trough_h}}-{{big_peak_h}}_l{{big_lobes}}_ripple{{ripple_a}}x{{ripple_l}}.stl" {{big_args}}
+    just render "{{out}}/base_d150_h{{big_trough_h}}-{{big_peak_h}}_l{{big_lobes}}_ripple{{ripple_a}}x{{ripple_l}}_f{{ripple_fade}}.stl" {{big_args}}
 
 # Regenerate the drawings used by the README
 preview:

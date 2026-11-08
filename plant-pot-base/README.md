@@ -4,9 +4,9 @@ Round bases for plant pots: a floor and a 2.4 mm wall, whose top edge
 rises and falls in gentle waves round the rim. There are two:
 
 - a 7 cm base with a flat 2 mm floor and six waves (`pixi run base`), and
-- a 15 cm base whose floor rises and falls in a few broad bumps, so the
-  pot rests on three of them and water stands in the hollows between,
-  where air reaches it and it dries (`pixi run base-15`). See [The 15 cm base](#the-15-cm-base).
+- a 15 cm base whose floor rises and falls in rounded bumps, so the pot
+  rests on their tops and water stands in the hollows between, where air
+  reaches it and it dries (`pixi run base-15`). See [The 15 cm base](#the-15-cm-base).
 
 ![preview](preview.svg)
 
@@ -40,6 +40,7 @@ looks the same on the steep parts of the wave as on the peaks.
 | foot chamfer | 0.5 mm on the outer edge, against elephant's foot | `--foot_chamfer` |
 | floor ripple amplitude | 0, a flat floor | `--ripple_a` |
 | floor ripple wavelength | 40 mm | `--ripple_l` |
+| floor ripple fade | 0, no fade | `--ripple_fade` |
 
 `validate()` refuses a trough too low for the crest rounding to fit above
 the floor (the ripples' peaks, if any), rounding wider than half the wall,
@@ -54,26 +55,27 @@ and anything over the 256 mm bed.
 lobes about 43 mm long, and a rippled floor:
 
 ```
-z(x, y) = floor + ripple_a * (1 + sin(k x) * cos(k y)),   k = 2 pi / ripple_l
+z(x, y) = floor + ripple_a * (1 + e(r) * sin(k x) * cos(k y)),   k = 2 pi / ripple_l
 ```
 
-With `ripple_a` 5 mm and `ripple_l` 100 mm, the floor is 2 mm thick at the
-bottom of the hollows and 12 mm on top of the bumps. Inside the pocket
-there are three whole bumps, at (25, 0), (-25, 50) and (-25, -50) mm, and
-three whole hollows, at (-25, 0), (25, 50) and (25, -50) mm; the axis is
-halfway up a slope. The pot stands on the three bumps like a tripod, and
-stands 13 mm into the wall at the wall's highest points, 9 mm at its
-lowest. Where the floor meets the wall it runs anywhere from 2 to 12 mm
-high.
+With `ripple_a` 5 mm and `ripple_l` 33.3 mm, the floor is 2 mm thick at
+the bottom of the hollows and 12 mm on top of the bumps, whose tops are
+23.6 mm from their nearest neighbors; the axis is halfway up a slope. The
+envelope `e(r)` is 1 in the middle and falls smoothly to 0 over the last
+15 mm before the wall (`--ripple_fade 15`), so the floor meets the wall
+level, 7 mm high all round, with no slope at the corner. That leaves 19
+bumps at full height for the pot to stand on, plus some partly faded ones
+near the wall, and as many hollows. The pot stands 13 mm into the wall at
+the wall's highest points, 9 mm at its lowest.
 
-The slopes are no steeper than 17 degrees and there are no ridges or
-small pits, so a sponge reaches every part of the floor. The slopes face
-up, so the base prints without support. A shorter `--ripple_l` gives more,
-steeper bumps.
+The slopes are at most about 43 degrees, smooth, with no sharp ridges or
+narrow pits, and the corner with the wall is the same all round, so a
+sponge or brush can wipe the whole floor. The slopes face up, so the base
+prints without support. A longer `--ripple_l` gives fewer, gentler bumps.
 
 The base is about 141 cm³ if printed solid; most of that is the floor,
 so the slicer's infill sets how much plastic it takes.
-A line drawing shows the bumps only by their silhouette, the one curve
+A line drawing shows the bumps only by their silhouettes, the wavy curves
 across the floor.
 
 ## Use
@@ -102,8 +104,11 @@ gave OCCT booleans that returned wrong volumes once the wave had more than
 six lobes, so the tests check the base's volume against the analytic value
 as well as its heights.
 
-The rippled floor is a B-spline fitted through the ripple on a grid of 16
-points per wavelength, and a disc is cut off under it. OCCT could not
+The rippled floor is a B-spline fitted through the ripple on a grid of 20
+points per wavelength (or per 2 × the fade, if that is shorter), and a
+disc is cut off under it. The fade follows a quintic smoothstep rather
+than cos², because the fit missed cos²'s jumps in curvature by up to
+0.4 mm. OCCT could not
 intersect that B-spline with the lofted wall, so the ring is there to give
 the floor a true cylinder to meet. The tests compare the volume against the
 analytic value (the ripple is odd in x, so it adds only its mean height),
