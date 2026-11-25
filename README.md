@@ -13,4 +13,4 @@ This repository contains models / plans for physical things. Likely stuff I need
 - [`beam-clip/`](beam-clip/): a flat 3 mm clip, flush on a 40 mm beam's face, whose serpentine strip holds on by being stretched across it.
 - [`cam-anchor/`](cam-anchor/): a trigger-released, four-cam anchor that sets itself in the 80 mm gap between ceiling beams and holds a hanging load.
 - [`plant-pot-base/`](plant-pot-base/): bases for plant pots whose rim rises and falls in gentle waves: a 7 cm one, and a 15 cm one with a rippled floor that lets water stand under the pot and dry.
-- [`light-diffuser/`](light-diffuser/): a thin tube with a flat base that stands over a spherical lamp, its wall rippling in flutes that sway from side to side.
+- [`light-diffuser/`](light-diffuser/): a thin tube, open at both ends, that stands over a spherical lamp, its wall rippling in flutes that sway from side to side.

@@ -1,5 +1,5 @@
-"""A diffuser for a spherical lamp: a thin-walled tube, closed at one end by a
-flat base, whose wall ripples in soft vertical flutes that sway from side
+"""A diffuser for a spherical lamp: a thin-walled tube, open at both ends,
+whose wall ripples in soft vertical flutes that sway from side
 to side up its height.
 
 Seen from above, the wall's outer face is ``lobes`` flutes round a circle
@@ -18,14 +18,12 @@ on the other lean right, and the swaying passes round the lamp like a
 ripple across water.
 
 The wall is ``wall`` thick measured across it, level: its inner face is
-the outer one offset inward in every horizontal section. The base is a
-flat plate ``base`` thick under the whole outline. The other end is open.
+the outer one offset inward in every horizontal section.
 
-The diffuser stands on z = 0 with the base on the bed and prints the way it
-is modeled, in vase mode or with a single perimeter. Nothing leans more
+The diffuser stands on z = 0 and prints the way it is modeled, in vase
+mode with no bottom layers or with a single perimeter. Nothing leans more
 than ``MAX_OVERHANG`` from vertical, so nothing needs support. To use it,
-stand it over the lamp with the base on top, the cord out the open end;
-or drop the lamp in base down.
+stand it over the lamp.
 
 Usage:
     python diffuser.py -o diffuser.stl [--d 170] [--h 150] [--lobes 24] [--ripple_a 4.5]
@@ -69,9 +67,8 @@ class DiffuserParams:
     # Diameter of the wall's outer face, before the ripple.
     d: float = 170.0
     h: float = 150.0
-    # The wall, measured level across it, and the base.
+    # The wall, measured level across it.
     wall: float = 1.0
-    base: float = 1.0
     # Flutes round the rim, and how far each stands in and out of d / 2.
     lobes: int = 24
     ripple_a: float = 4.5
@@ -150,8 +147,8 @@ class DiffuserParams:
         return float(1 / k.max())
 
     def validate(self) -> None:
-        if min(self.d, self.h, self.wall, self.base) <= 0:
-            raise ValueError("d, h, wall and base must be positive")
+        if min(self.d, self.h, self.wall) <= 0:
+            raise ValueError("d, h and wall must be positive")
         if not all(isinstance(n, numbers.Integral) and not isinstance(n, bool)
                    for n in (self.lobes, self.sway_turns)):
             raise ValueError("lobes and sway_turns must be whole numbers")
@@ -159,8 +156,6 @@ class DiffuserParams:
             raise ValueError("lobes must be at least 1")
         if self.ripple_a < 0 or self.sway < 0 or self.sway_periods < 0:
             raise ValueError("ripple_a, sway and sway_periods must not be negative")
-        if self.base >= self.h:
-            raise ValueError("base must be thinner than h")
         if 2 * self.ripple_a > SPREAD:
             raise ValueError(
                 f"the ripple spans {4 * self.ripple_a:g} across, over the {2 * SPREAD:g} "
@@ -187,7 +182,7 @@ class DiffuserParams:
     def report(self) -> str:
         return (
             f"diffuser {self.d - 2 * self.ripple_a:g}-{self.d + 2 * self.ripple_a:g} across, "
-            f"{self.h:g} tall, {self.wall:g} wall, {self.base:g} base; {self.lobes} flutes "
+            f"{self.h:g} tall, {self.wall:g} wall, open both ends; {self.lobes} flutes "
             f"swaying {self.sway:g} {self.sway_periods:g} times up, leaning at most "
             f"{self.steepest():.0f} degrees, crests R{self.tightest():.1f} or more"
         )
@@ -259,8 +254,8 @@ def _tube(p: DiffuserParams, z0: float, z1: float, inner: bool) -> Solid:
 
 def diffuser(p: DiffuserParams) -> Part:
     p.validate()
-    # the hollow runs out past the top, so the cut leaves that end open
-    body = _tube(p, 0, p.h, inner=False).cut(_tube(p, p.base, p.h + 1, inner=True))
+    # the hollow runs out past both ends, so the cut leaves them open
+    body = _tube(p, 0, p.h, inner=False).cut(_tube(p, -1, p.h + 1, inner=True))
     if len(body.solids()) != 1:
         raise RuntimeError(f"the cut left {len(body.solids())} solids, not 1")
     return Part([body.solids()[0]])

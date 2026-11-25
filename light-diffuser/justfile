@@ -1,4 +1,4 @@
-# Dev actions for the lamp diffuser: a thin tube with a flat base whose
+# Dev actions for the lamp diffuser: a thin tube, open at both ends, whose
 # wall ripples in flutes that sway up its height. Run `just` to list them.
 #
 # Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.

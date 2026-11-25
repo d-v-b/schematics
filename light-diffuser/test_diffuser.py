@@ -1,4 +1,4 @@
-"""The diffuser is a tube with a flat base and an open top, whose outer face
+"""The diffuser is a tube open at both ends, whose outer face
 follows r(theta, z), whose wall is wall thick level across it, and which
 prints as modeled.
 
@@ -48,14 +48,14 @@ def _normals_z(face, nu: int = 1200, nv: int = 60) -> list[float]:
     return out
 
 
-@pytest.mark.parametrize("d,h,wall,base,lobes,ripple_a,sway,sway_periods,sway_turns", [
-    (170.0, 150.0, 1.0, 1.0, 24, 4.5, 16.0, 1.0, 1),   # the default
-    (170.0, 150.0, 1.0, 1.0, 24, 4.5, 0.0, 1.0, 1),    # straight flutes
-    (160.0, 120.0, 1.2, 1.5, 12, 3.0, 12.0, 1.5, 0),   # fewer flutes swaying together
-    (100.0, 60.0, 1.6, 2.0, 24, 0.0, 16.0, 1.0, 1),    # no ripple: a plain tube
+@pytest.mark.parametrize("d,h,wall,lobes,ripple_a,sway,sway_periods,sway_turns", [
+    (170.0, 150.0, 1.0, 24, 4.5, 16.0, 1.0, 1),   # the default
+    (170.0, 150.0, 1.0, 24, 4.5, 0.0, 1.0, 1),    # straight flutes
+    (160.0, 120.0, 1.2, 12, 3.0, 12.0, 1.5, 0),   # fewer flutes swaying together
+    (100.0, 60.0, 1.6, 24, 0.0, 16.0, 1.0, 1),    # no ripple: a plain tube
 ])
-def test_shape(d, h, wall, base, lobes, ripple_a, sway, sway_periods, sway_turns):
-    p = DiffuserParams(d=d, h=h, wall=wall, base=base, lobes=lobes, ripple_a=ripple_a, sway=sway,
+def test_shape(d, h, wall, lobes, ripple_a, sway, sway_periods, sway_turns):
+    p = DiffuserParams(d=d, h=h, wall=wall, lobes=lobes, ripple_a=ripple_a, sway=sway,
                        sway_periods=sway_periods, sway_turns=sway_turns)
     body = diffuser(p)
     assert body.is_valid() and len(body.solids()) == 1
@@ -72,8 +72,8 @@ def test_shape(d, h, wall, base, lobes, ripple_a, sway, sway_periods, sway_turns
     # face lies wall from the outer face's section, measured level
     rng = np.random.default_rng(0)
     fine = np.linspace(0, 2 * np.pi, 40000, endpoint=False)
-    # including just above the base and just below the rim
-    zs = np.concatenate([rng.uniform(base + 0.5, h - 0.5, 10), [base + 0.1, base + 1.5, h - 0.1, h - 1.5]])
+    # including just above the bottom rim and just below the top one
+    zs = np.concatenate([rng.uniform(0.5, h - 0.5, 10), [0.1, 1.5, h - 0.1, h - 1.5]])
     for theta, z in zip(rng.uniform(0, 2 * np.pi, 14), zs):
         r_in, r_out = _radial_hits(body, theta, z)
         assert r_out == pytest.approx(float(p.r(theta, z)), abs=TOL)
@@ -81,19 +81,17 @@ def test_shape(d, h, wall, base, lobes, ripple_a, sway, sway_periods, sway_turns
         gap = np.hypot(ox - r_in * math.cos(theta), oy - r_in * math.sin(theta)).min()
         assert gap == pytest.approx(wall, abs=TOL)
 
-    # the base is solid and flat; above it the tube is clear and open
+    # the tube is clear and open from end to end
     for x, y in [(0.0, 0.0), (0.3 * d, 0.1 * d)]:
-        hits = body.find_intersection_points(Axis((x, y, -1), (0, 0, 1)))
-        assert sorted(round(q.Z, 3) for q, *_ in hits) == pytest.approx([0, base], abs=TOL)
+        assert not body.find_intersection_points(Axis((x, y, -1), (0, 0, 1)))
 
-    # the volume adds up: the outer section's area all the way up, less
-    # the inner one's above the base. With this many flutes both are the
-    # same at every height
+    # the volume adds up: the area between the outer and inner sections,
+    # all the way up. With this many flutes both are the same at every height
     th = np.linspace(0, 2 * np.pi, 40000, endpoint=False)
-    expected = _area(*p.outer_xy(th, 0.0)) * h - _area(*p.inner_xy(th, 0.0)) * (h - base)
+    expected = (_area(*p.outer_xy(th, 0.0)) - _area(*p.inner_xy(th, 0.0))) * h
     assert volume(body) == pytest.approx(expected, rel=1e-4)
 
-    # nothing leans more than 45 degrees from vertical: the flat faces lie
+    # nothing leans more than 45 degrees from vertical: the rims lie
     # level, and the walls' normals are sampled over their whole parameter range
     limit = -math.sin(math.radians(45)) - 1e-6
     for f in body.faces():
@@ -105,7 +103,7 @@ def test_shape(d, h, wall, base, lobes, ripple_a, sway, sway_periods, sway_turns
 
 
 def test_rejects_non_positive_size():
-    with pytest.raises(ValueError, match="d, h, wall and base must be positive"):
+    with pytest.raises(ValueError, match="d, h and wall must be positive"):
         diffuser(DiffuserParams(wall=0.0))
 
 
@@ -122,11 +120,6 @@ def test_rejects_no_lobes():
 def test_rejects_negative_ripple():
     with pytest.raises(ValueError, match="must not be negative"):
         diffuser(DiffuserParams(sway=-1.0))
-
-
-def test_rejects_base_as_tall_as_the_tube():
-    with pytest.raises(ValueError, match="base must be thinner than h"):
-        diffuser(DiffuserParams(h=10.0, base=10.0))
 
 
 def test_rejects_ripple_over_the_spread():
