@@ -1,0 +1,38 @@
+# Dev actions for the lamp diffuser: a thin tube, open at both ends, whose
+# wall ripples in flutes that sway up its height. Run `just` to list them.
+#
+# Run inside the pixi env (`pixi shell`) or via `pixi run <recipe>`.
+
+python := env("PYTHON", "python")
+out := "stl"
+
+d := "170"          # the wall's outer face, before the ripple, mm
+h := "150"
+lobes := "24"       # flutes round the rim
+ripple_a := "4.5"   # how far each stands in and out, mm
+sway := "16"        # how far they sway sideways, mm
+args := "--d " + d + " --h " + h + " --lobes " + lobes + " --ripple_a " + ripple_a + " --sway " + sway
+
+default:
+    @just --list
+
+# Render the diffuser (.stl, .step or .png) with any --param overrides, e.g. `just render out.stl --lobes 18`
+[positional-arguments]
+render outfile *args:
+    {{python}} diffuser.py -o "$@"
+
+# Render the diffuser with the values above
+diffuser:
+    just render "{{out}}/diffuser_d{{d}}_h{{h}}_l{{lobes}}_a{{ripple_a}}_s{{sway}}.stl" {{args}}
+
+# Regenerate the picture used by the README
+preview:
+    just render preview.png {{args}}
+
+# Run the geometry tests
+test:
+    {{python}} -m pytest -q
+
+# Delete rendered output
+clean:
+    rm -rf {{out}}
